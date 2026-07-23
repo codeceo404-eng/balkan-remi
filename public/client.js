@@ -29,9 +29,6 @@ const TOUCH_THRESHOLD = 10; // px pomaka za start draga
 // Otvaranje igre — višestruki meldovi
 let openingMelds    = []; // [ [cardId, ...], [cardId, ...], ... ]
 
-// Joker swap
-let jokerSwapMode   = false;
-let jokerSwapTarget = null;
 
 // Hint
 let hintCombos = [];
@@ -67,8 +64,6 @@ const deckCount    = $("deck-count");
 const handArea     = $("hand-area");
 const btnMeld          = $("btn-meld");
 const btnDiscard       = $("btn-discard");
-const btnSwapJoker     = $("btn-swap-joker");
-const btnCancelSwap    = $("btn-cancel-swap");
 const btnOpenGame      = $("btn-open-game");
 const btnCancelOpening = $("btn-cancel-opening");
 const openingStage     = $("opening-stage");
@@ -99,13 +94,23 @@ document.querySelector(".topbar-right").insertBefore(
   document.getElementById("btn-start")
 );
 
+// Sortiranje — ciklički prelazi između: kombos → boja+rang
+let _sortMode = 0; // 0 = kombos, 1 = boja+rang
+
 const btnSort = document.createElement("button");
-btnSort.id        = "btn-sort";
-btnSort.className = "btn-action btn-gray";
-btnSort.title     = "Složi karte po boji i vrijednosti";
-btnSort.textContent = "⇅ Složi";
-btnSort.onclick   = () => {
-  myHandOrder = sortHand(myHand).map(c => c.id);
+btnSort.id          = "btn-sort";
+btnSort.className   = "btn-action btn-gray";
+btnSort.title       = "Složi karte — izmjenjuje između sortiranja po kombinacijama i boji/rangu";
+btnSort.textContent = "⇅ Kombos";
+btnSort.onclick     = () => {
+  _sortMode = (_sortMode + 1) % 2;
+  if (_sortMode === 0) {
+    myHandOrder = sortHandByCombos(myHand).map(c => c.id);
+    btnSort.textContent = "⇅ Kombos";
+  } else {
+    myHandOrder = sortHand(myHand).map(c => c.id);
+    btnSort.textContent = "⇅ Boja";
+  }
   renderHand();
 };
 document.querySelector(".action-left").appendChild(btnSort);
@@ -227,11 +232,9 @@ socket.on("gameStarted", () => {
   overlay.style.display     = "none";
   selected.clear();
   openingMelds    = [];
-  jokerSwapMode   = false;
-  jokerSwapTarget = null;
+  _wasMyturn      = false;
   hintCombos = []; hintIdx = -1;
   renderOpeningStage();
-  updateSwapUI();
   addChat({ system: true, text: "🎴 Nova runda je počela!" });
 });
 
@@ -351,35 +354,6 @@ btnDiscard.onclick = () => {
   updateButtons();
 };
 
-// Joker swap
-btnSwapJoker.onclick = () => {
-  if (selected.size !== 1) { showToast("Odaberi točno 1 kartu za zamjenu.", "warn"); return; }
-  const [naturalCardId] = selected;
-  const nat = myHand.find(c => c.id === naturalCardId);
-  if (!nat) return;
-  if (nat.name === "JOKER") { showToast("Ne možeš zamijeniti joker jokerom.", "warn"); return; }
-  jokerSwapMode   = true;
-  jokerSwapTarget = { naturalCardId };
-  updateSwapUI();
-  showToast("Klikni ili odvuci kartu na kombinaciju s jokerom.", "info");
-};
-
-btnCancelSwap.onclick = () => {
-  jokerSwapMode   = false;
-  jokerSwapTarget = null;
-  updateSwapUI();
-};
-
-function updateSwapUI() {
-  const swapVisible = jokerSwapMode;
-  btnCancelSwap.style.display = swapVisible ? "inline-flex" : "none";
-  btnSwapJoker.style.display  = !swapVisible && isMyTurn() && getPhase() === "play" && isOpened()
-    ? "inline-flex" : "none";
-  document.querySelectorAll(".meld").forEach(el => {
-    el.classList.toggle("swap-target", jokerSwapMode);
-  });
-}
-
 // Chat
 btnChat.onclick = sendChat;
 chatInput.addEventListener("keydown", e => { if (e.key === "Enter") sendChat(); });
@@ -400,12 +374,13 @@ function renderAll() {
   renderTable();
   renderMelds();
   updateButtons();
-  updateSwapUI();
 }
 
 // ── PLAYERS BAR ──────────────────────────────────────────────────
+let _wasMyturn = false; // za toast "tvoj red"
+
 function renderPlayersBar() {
-  const { players, turn } = gameState;
+  const { players, turn, phase } = gameState;
   playersBar.innerHTML = "";
   players.forEach((p, i) => {
     const div = document.createElement("div");
@@ -416,18 +391,24 @@ function renderPlayersBar() {
     div.innerHTML = `
       <span class="chip-name">${escHtml(p.name)}</span>
       <span class="chip-cards">${p.count}🃏</span>
+      ${p.count === 1 ? '<span class="chip-last-card">⚠ 1!</span>' : ""}
       <span class="chip-score ${p.totalScore > 0 ? "chip-bad" : p.totalScore < 0 ? "chip-good" : ""}">${p.totalScore}</span>
       ${p.opened ? '<span class="chip-open">✓</span>' : ""}
     `;
     playersBar.appendChild(div);
   });
 
-  const cur = players[gameState.turn];
+  const cur = players[turn];
   if (cur) {
-    lblTurn.textContent = isMyTurn()
-      ? "🟢 Tvoj red!"
-      : `⏳ ${escHtml(cur.name)} igra...`;
-    lblTurn.className = isMyTurn() ? "turn-mine" : "turn-other";
+    const myTurn = isMyTurn();
+    lblTurn.textContent = myTurn ? "🟢 Tvoj red!" : `⏳ ${escHtml(cur.name)} igra...`;
+    lblTurn.className = myTurn ? "turn-mine" : "turn-other";
+
+    // Toast samo kad red prijeđe NA mene (ne pri svakom renderu)
+    if (myTurn && !_wasMyturn && phase === "draw") {
+      showToast("🟢 Tvoj red!", "info");
+    }
+    _wasMyturn = myTurn;
   }
 }
 
@@ -461,23 +442,8 @@ function renderMelds() {
   gameState.table.forEach((meld, meldIdx) => {
     const div = document.createElement("div");
     div.className = "meld";
-    if (jokerSwapMode) div.classList.add("swap-target");
 
-    div.onclick = e => {
-      // Swap joker mod
-      if (jokerSwapMode && jokerSwapTarget) {
-        e.stopPropagation();
-        socket.emit("swapJoker", roomId, {
-          meldIndex:     meldIdx,
-          naturalCardId: jokerSwapTarget.naturalCardId,
-        });
-        jokerSwapMode   = false;
-        jokerSwapTarget = null;
-        selected.clear();
-        updateSwapUI();
-        renderHand();
-        return;
-      }
+    div.onclick = () => {
       // Tap na meld s 1 selektiranom kartom → addToMeld (korisno na mobitelu)
       if (isMyTurn() && getPhase() === "play" && isOpened() && selected.size === 1) {
         const [cardId] = selected;
@@ -499,18 +465,7 @@ function renderMelds() {
       e.preventDefault();
       div.classList.remove("drag-over");
       if (dragCardId == null || dragSource !== "hand") return;
-      if (jokerSwapMode && jokerSwapTarget) {
-        socket.emit("swapJoker", roomId, {
-          meldIndex:     meldIdx,
-          naturalCardId: jokerSwapTarget.naturalCardId,
-        });
-        jokerSwapMode   = false;
-        jokerSwapTarget = null;
-        selected.clear();
-        updateSwapUI();
-      } else {
-        socket.emit("addToMeld", roomId, { meldIndex: meldIdx, cardId: dragCardId });
-      }
+      socket.emit("addToMeld", roomId, { meldIndex: meldIdx, cardId: dragCardId });
       dragCardId = null;
       dragSource  = null;
     };
@@ -556,6 +511,7 @@ function renderHand() {
     const relPos = i - midIndex;
     const angle  = (total > 1 && midIndex > 0) ? (relPos / midIndex) * halfSpread : 0;
     el.style.setProperty("--fan-rotate", `${angle.toFixed(2)}deg`);
+    el.style.setProperty("--card-z", String(i + 1));  // za CSS calc() u hover/selected
     el.style.marginLeft = i > 0 ? `-${overlapPx}px` : "0";
     el.style.zIndex     = i + 1;
 
@@ -573,7 +529,6 @@ function renderHand() {
       dragCardId = c.id;
       dragSource  = "hand";
       e.dataTransfer.effectAllowed = "move";
-      if (jokerSwapMode) jokerSwapTarget = { naturalCardId: c.id };
       requestAnimationFrame(() => el.classList.add("dragging"));
     };
 
@@ -727,13 +682,18 @@ function updateButtons() {
   const staging = !opened && openingMelds.length > 0;
 
   // "Dodaj meld" kad nije otvoren, "Položi" kad je otvoren
+  const mustOpen = gameState?.mustOpenThisTurn && !opened;
+
   btnMeld.textContent = opened ? "🃏 Položi" : "🃏 Dodaj meld";
   btnMeld.disabled    = !(play && selected.size >= 3);
 
-  btnDiscard.disabled = !(play && selected.size === 1) || staging;
+  // Ne možeš baciti dok se nisi otvorio (uzeo si s otpada)
+  btnDiscard.disabled = !(play && selected.size === 1) || staging || mustOpen;
 
-  btnSwapJoker.style.display  = play && opened && !jokerSwapMode ? "inline-flex" : "none";
-  btnCancelSwap.style.display = jokerSwapMode                    ? "inline-flex" : "none";
+  // Upozorenje u sel-info
+  if (mustOpen && play) {
+    selInfo.textContent = "⚠ Uzeo si s otpada — moraš se otvoriti ovaj red!";
+  }
 
   // Otvori igru! / Poništi — kontrolira renderOpeningStage()
   if (!play || opened) {
@@ -859,6 +819,33 @@ function sortHand(hand) {
   });
 }
 
+/**
+ * Sortira ruku po kombinacijama: validni meldovi su grupirani s lijeva,
+ * ostatak iza. Unutar grupe sortira po boji+rangu.
+ */
+function sortHandByCombos(hand) {
+  const combos  = findValidCombos(hand); // već postoji
+  const usedIds = new Set();
+  const groups  = [];
+
+  // Greedily rasporedi karte u combo grupe (veći prioritet = veći/vrjedniji meld)
+  for (const combo of combos) {
+    if (combo.every(c => !usedIds.has(c.id))) {
+      const sorted = [...combo].sort((a,b) => {
+        const sd = (SUIT_ORDER[a.suit]??9) - (SUIT_ORDER[b.suit]??9);
+        return sd !== 0 ? sd : ORDER.indexOf(a.name) - ORDER.indexOf(b.name);
+      });
+      groups.push(sorted);
+      combo.forEach(c => usedIds.add(c.id));
+    }
+  }
+
+  // Ostatak — sortiraj po boji+rangu
+  const leftover = sortHand(hand.filter(c => !usedIds.has(c.id)));
+
+  return [...groups.flat(), ...leftover];
+}
+
 // ════════════════════════════════════════════════════════════════
 //  VALIDACIJA NA KLIJENTU (UI feedback)
 // ════════════════════════════════════════════════════════════════
@@ -960,7 +947,6 @@ function initTouchDrag(el, card) {
     dragActive  = false;
     dragCardId  = card.id;
     dragSource  = "hand";
-    if (jokerSwapMode) jokerSwapTarget = { naturalCardId: card.id };
   }, { passive: true });
 
   el.addEventListener("touchmove", e => {
@@ -1061,18 +1047,7 @@ function initTouchDrag(el, card) {
       if (meldEl && meldEl.parentElement === meldsArea) {
         const meldIdx = [...meldsArea.children].indexOf(meldEl);
         if (meldIdx >= 0 && dragCardId != null) {
-          if (jokerSwapMode && jokerSwapTarget) {
-            socket.emit("swapJoker", roomId, {
-              meldIndex:     meldIdx,
-              naturalCardId: jokerSwapTarget.naturalCardId,
-            });
-            jokerSwapMode   = false;
-            jokerSwapTarget = null;
-            selected.clear();
-            updateSwapUI();
-          } else {
-            socket.emit("addToMeld", roomId, { meldIndex: meldIdx, cardId: dragCardId });
-          }
+          socket.emit("addToMeld", roomId, { meldIndex: meldIdx, cardId: dragCardId });
         }
       } else if (discardEl && isMyTurn() && getPhase() === "play" && dragCardId != null) {
         socket.emit("discard", roomId, dragCardId);
