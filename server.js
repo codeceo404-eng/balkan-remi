@@ -174,7 +174,7 @@ function makePlayer(socketId, name) {
     id: socketId, name,
     hand: [], opened: false,
     roundScore: 0, totalScore: 0,
-    connected: true, isBot: false,
+    connected: true, isBot: false, eliminated: false,
   };
 }
 
@@ -184,7 +184,7 @@ function makeBotPlayer(name) {
     name,
     hand: [], opened: false,
     roundScore: 0, totalScore: 0,
-    connected: true, isBot: true,
+    connected: true, isBot: true, eliminated: false,
   };
 }
 
@@ -197,6 +197,7 @@ function publicState(room) {
     deckCount:          room.deck.length,
     table:              room.table.map(sortMeld),
     mustOpenThisTurn:   room.mustOpenThisTurn || false,
+    scoreLimit:         room.scoreLimit,
     players:    room.players.map(p => ({
       id:         p.id,
       name:       p.name,
@@ -205,12 +206,19 @@ function publicState(room) {
       totalScore: p.totalScore,
       connected:  p.connected,
       isBot:      p.isBot,
+      eliminated: p.eliminated || false,
     })),
   };
 }
 
 function nextTurn(room) {
-  room.turn             = (room.turn + 1) % room.players.length;
+  const n = room.players.length;
+  let next = (room.turn + 1) % n;
+  for (let i = 0; i < n; i++) {
+    if (!room.players[next].eliminated) break;
+    next = (next + 1) % n;
+  }
+  room.turn             = next;
   room.phase            = "draw";
   room.mustOpenThisTurn = false;
 }
@@ -236,30 +244,57 @@ function endRound(room, winner) {
   if (room.botTimeout) { clearTimeout(room.botTimeout); room.botTimeout = null; }
 
   room.players.forEach(p => {
+    if (p.eliminated) return;
     if (p.id === winner.id) {
-      // Pobjednik: bonus −40 (smanjuje ukupni score)
       p.roundScore = WINNER_BONUS;
     } else {
-      // Gubitnik: vrijednost karata u ruci
       p.roundScore = handValue(p.hand);
-      // Nije se uspio otvoriti: dodatnih +100
       if (!p.opened) p.roundScore += UNOPENED_PENALTY;
     }
     p.totalScore += p.roundScore;
   });
 
+  // Provjeri nova eliminiranja (totalScore >= prag)
+  const newlyEliminated = [];
+  room.players.forEach(p => {
+    if (!p.eliminated && p.totalScore >= room.scoreLimit) {
+      p.eliminated = true;
+      newlyEliminated.push(p.name);
+    }
+  });
+
   room.phase = "ended";
 
   io.to(room.id).emit("roundOver", {
-    winnerName: winner.name,
+    winnerName:      winner.name,
+    eliminated:      newlyEliminated,
+    scoreLimit:      room.scoreLimit,
     scores: room.players.map(p => ({
       name:        p.name,
       roundScore:  p.roundScore,
       totalScore:  p.totalScore,
       opened:      p.opened,
       isWinner:    p.id === winner.id,
+      eliminated:  p.eliminated || false,
     })),
   });
+
+  // Kraj igre ako je ostao ≤1 aktivan igrač
+  const active = room.players.filter(p => !p.eliminated);
+  if (active.length <= 1) {
+    const gameWinner = active[0]
+      || [...room.players].sort((a,b) => a.totalScore - b.totalScore)[0];
+    io.to(room.id).emit("gameOver", {
+      winnerName: gameWinner.name,
+      scores: [...room.players]
+        .sort((a,b) => a.totalScore - b.totalScore)
+        .map(p => ({
+          name:       p.name,
+          totalScore: p.totalScore,
+          eliminated: p.eliminated || false,
+        })),
+    });
+  }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -313,6 +348,7 @@ function botDraw(room, bot) {
     if (shouldTake) {
       bot.hand.push(room.discard.pop());
       tookDiscard = true;
+      if (!bot.opened) room.mustOpenThisTurn = true;
     }
   }
 
@@ -337,56 +373,12 @@ function botDraw(room, bot) {
   room.players.forEach(p => sendHand(room, p));
 }
 
-/**
- * Pronalazi optimalni skup meldova za otvaranje (≥51 prirodnih bodova,
- * ostavljajući min. 1 kartu za bacanje).
- * Vraća niz meldova ili null.
- */
-function botFindOpeningMelds(hand) {
-  const combos = botFindCombos(hand);
-  if (combos.length === 0) return null;
-
-  // Jedan meld ≥51
-  const single = combos.find(c =>
-    naturalPoints(c) >= MIN_OPEN && c.length < hand.length
-  );
-  if (single) return [single];
-
-  // Dva melda — sve kombinacije parova
-  for (let i = 0; i < combos.length; i++) {
-    const ids1 = new Set(combos[i].map(c => c.id));
-    for (let j = i + 1; j < combos.length; j++) {
-      if (combos[j].some(c => ids1.has(c.id))) continue;
-      const total = naturalPoints(combos[i]) + naturalPoints(combos[j]);
-      const used  = combos[i].length + combos[j].length;
-      if (total >= MIN_OPEN && used < hand.length) return [combos[i], combos[j]];
-    }
-  }
-
-  // Tri melda
-  for (let i = 0; i < combos.length; i++) {
-    const ids1 = new Set(combos[i].map(c => c.id));
-    for (let j = i + 1; j < combos.length; j++) {
-      if (combos[j].some(c => ids1.has(c.id))) continue;
-      const ids12 = new Set([...ids1, ...combos[j].map(c => c.id)]);
-      for (let k = j + 1; k < combos.length; k++) {
-        if (combos[k].some(c => ids12.has(c.id))) continue;
-        const total = naturalPoints(combos[i]) + naturalPoints(combos[j]) + naturalPoints(combos[k]);
-        const used  = combos[i].length + combos[j].length + combos[k].length;
-        if (total >= MIN_OPEN && used < hand.length) return [combos[i], combos[j], combos[k]];
-      }
-    }
-  }
-
-  return null;
-}
-
 // ── BOT ODIGRAVANJE ───────────────────────────────────────────────
 function botPlay(room, bot) {
 
-  // 1. OTVORI IGRU s optimalnim skupom meldova (jedan ili više)
+  // 1. OTVORI IGRU — koristi isti algoritam kao canPlayerOpenWith (garantirano konzistentno)
   if (!bot.opened) {
-    const openingGroups = botFindOpeningMelds(bot.hand);
+    const openingGroups = findOpeningMeldsFor(bot.hand);
     if (openingGroups) {
       for (const meld of openingGroups) {
         const ids = new Set(meld.map(c => c.id));
@@ -394,6 +386,14 @@ function botPlay(room, bot) {
         room.table.push(meld);
       }
       bot.opened = true;
+      room.mustOpenThisTurn = false;
+    } else if (room.mustOpenThisTurn) {
+      // Trebao se otvoriti (uzeo s otpada) ali ne može — preskoči red kao fallback
+      room.mustOpenThisTurn = false;
+      nextTurn(room);
+      broadcastState(room);
+      room.players.forEach(p => sendHand(room, p));
+      return;
     }
   }
 
@@ -461,6 +461,15 @@ function botPlay(room, bot) {
 // ── BOT BACANJE KARTE ─────────────────────────────────────────────
 function botDiscard(room, bot) {
   if (bot.hand.length === 0) return;
+
+  // Sigurnosni guard: bot uzeo s otpada ali se nije otvorio — ne smije baciti
+  if (room.mustOpenThisTurn && !bot.opened) {
+    room.mustOpenThisTurn = false;
+    nextTurn(room);
+    broadcastState(room);
+    room.players.forEach(p => sendHand(room, p));
+    return;
+  }
 
   // Ocijeni svaku kartu — što je veći score, to je karta korisnija (ne bacaj je)
   function cardUsefulness(card) {
@@ -588,6 +597,7 @@ io.on("connection", socket => {
       deck: [], discard: [], table: [],
       turn: 0, phase: "lobby",
       round: 0,
+      scoreLimit:         2500,
       botTimeout:         null,
       mustOpenThisTurn:   false,
     };
@@ -646,34 +656,72 @@ io.on("connection", socket => {
   // ── START IGRE / NOVA RUNDA ──────────────────────────────────
   socket.on("startGame", roomId => {
     const room = rooms[roomId];
-    if (!room)                    return;
-    if (socket.id !== room.host)  return;
-    if (room.players.length < 2)  { socket.emit("err","Trebaju minimalno 2 igrača."); return; }
+    if (!room)                   return;
+    if (socket.id !== room.host) return;
     if (!["lobby","ended"].includes(room.phase)) return;
+
+    const active = room.players.filter(p => !p.eliminated);
+    if (active.length < 2) { socket.emit("err","Nedovoljno aktivnih igrača za novu rundu."); return; }
 
     if (room.botTimeout) { clearTimeout(room.botTimeout); room.botTimeout = null; }
 
-    room.deck  = newDeck();
-    room.table = [];
+    room.deck    = newDeck();
+    room.table   = [];
     room.discard = [];
-    room.turn  = (room.round % room.players.length);
+
+    // Red počinje na sljedećem aktivnom igraču u rotaciji
+    const startPlayer = active[room.round % active.length];
+    room.turn  = room.players.indexOf(startPlayer);
     room.phase = "draw";
     room.round++;
 
     room.players.forEach(p => {
-      p.hand    = [];
-      p.opened  = false;
+      p.hand       = [];
+      p.opened     = false;
       p.roundScore = 0;
     });
 
+    // Dijeli karte samo aktivnim igračima
     for (let i = 0; i < 14; i++)
-      room.players.forEach(p => p.hand.push(room.deck.pop()));
+      active.forEach(p => p.hand.push(room.deck.pop()));
 
     room.discard.push(room.deck.pop());
 
-    broadcastState(room); // zakazuje bot ako je bot prvi na redu
+    broadcastState(room);
     room.players.forEach(p => sendHand(room, p));
     io.to(roomId).emit("gameStarted");
+  });
+
+  // ── POSTAVI BODOVNI PRAG ─────────────────────────────────────
+  socket.on("setScoreLimit", (roomId, limit) => {
+    const room = rooms[roomId];
+    if (!room)                   return;
+    if (socket.id !== room.host) return;
+    if (!["lobby","ended"].includes(room.phase)) {
+      socket.emit("err","Prag se može mijenjati samo između rundi."); return;
+    }
+    const n = parseInt(limit);
+    if (isNaN(n) || n < 100 || n > 10000) {
+      socket.emit("err","Bodovni prag mora biti između 100 i 10000."); return;
+    }
+    room.scoreLimit = n;
+    broadcastState(room);
+  });
+
+  // ── RESET IGRE (nova igra od početka) ────────────────────────
+  socket.on("restartGame", roomId => {
+    const room = rooms[roomId];
+    if (!room)                   return;
+    if (socket.id !== room.host) return;
+    room.phase = "lobby";
+    room.round = 0;
+    room.table = []; room.deck = []; room.discard = [];
+    room.players.forEach(p => {
+      p.hand = []; p.opened = false;
+      p.roundScore = 0; p.totalScore = 0; p.eliminated = false;
+    });
+    broadcastState(room);
+    room.players.forEach(p => sendHand(room, p));
   });
 
   // ── VUCI S KUPA ─────────────────────────────────────────────
@@ -933,6 +981,51 @@ io.on("connection", socket => {
     broadcastState(room);
   });
 
+  // ── LEAVE ROOM ──────────────────────────────────────────────
+  socket.on("leaveRoom", (roomId) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const idx = room.players.findIndex(pl => pl.id === socket.id);
+    if (idx === -1) return;
+    const p = room.players[idx];
+
+    io.to(roomId).emit("chat", { system: true, text: `${p.name} je napustio sobu.` });
+
+    // Makni igrača iz sobe
+    room.players.splice(idx, 1);
+    socket.leave(roomId);
+    socket.data.roomId = null;
+    localStorage && delete socket.data.roomId;
+
+    // Obriši sobu ako je prazna
+    if (room.players.filter(pl => !pl.isBot).length === 0) {
+      delete rooms[roomId];
+      return;
+    }
+
+    // Prenesi host
+    if (room.host === socket.id) {
+      const newHost = room.players.find(pl => !pl.isBot && pl.connected);
+      if (newHost) {
+        room.host = newHost.id;
+        io.to(newHost.id).emit("youAreHost");
+      }
+    }
+
+    // Ako je igra u tijeku i bio je na redu — preskoči
+    if (room.phase !== "lobby" && room.phase !== "ended") {
+      // Popravi turn index ako je potrebno
+      if (room.turn >= room.players.length) room.turn = 0;
+      // Nađi sljedećeg aktivnog
+      nextTurn(room);
+      broadcastState(room);
+      room.players.forEach(pl => sendHand(room, pl));
+    } else {
+      broadcastState(room);
+    }
+  });
+
   // ── RECONNECT ────────────────────────────────────────────────
   socket.on("reconnect", ({ roomId, name }) => {
     const room = rooms[roomId];
@@ -960,47 +1053,56 @@ io.on("connection", socket => {
 // ════════════════════════════════════════════════════════════════
 
 /**
- * Provjeri može li igrač otvoriti igru s danom rukom (≥51 prirodnih boda
- * u jednoj ili više kombinacija, uz zadržavanje min. 1 karte za bacanje).
+ * Pronalazi konkretne meld grupe za otvaranje (≥51 prirodnih bodova,
+ * 1–3 melda, uz zadržavanje min. 1 karte za bacanje).
+ * Vraća niz meld grupa ili null. Ista logika koristi se i za provjeru i za bot igru.
  */
-function canPlayerOpenWith(hand) {
+function findOpeningMeldsFor(hand) {
   const all = [];
-  const cap = Math.min(hand.length - 1, 7); // ostavi bar 1 za bacanje
+  const cap = Math.min(hand.length - 1, 7);
   for (let size = 3; size <= cap; size++) {
     for (const combo of cardCombinations(hand, size)) {
       if (isValidMeld(combo)) all.push(combo);
     }
   }
-  if (all.length === 0) return false;
+  if (all.length === 0) return null;
 
-  // Jedan meld ≥51
-  if (all.some(c => naturalPoints(c) >= MIN_OPEN)) return true;
+  // 1 meld ≥51
+  const single = all.find(c => naturalPoints(c) >= MIN_OPEN);
+  if (single) return [single];
 
-  // Dva melda zajedno ≥51 (bez preklapanja)
-  for (let i = 0; i < all.length - 1; i++) {
+  // 2 melda zajedno ≥51
+  for (let i = 0; i < all.length; i++) {
     const ids1 = new Set(all[i].map(c => c.id));
     for (let j = i + 1; j < all.length; j++) {
       if (all[j].some(c => ids1.has(c.id))) continue;
-      if (naturalPoints(all[i]) + naturalPoints(all[j]) >= MIN_OPEN) return true;
+      const used = all[i].length + all[j].length;
+      if (naturalPoints(all[i]) + naturalPoints(all[j]) >= MIN_OPEN && used < hand.length)
+        return [all[i], all[j]];
     }
   }
 
-  // Tri melda zajedno ≥51
-  for (let i = 0; i < all.length - 2; i++) {
+  // 3 melda zajedno ≥51
+  for (let i = 0; i < all.length; i++) {
     const ids1 = new Set(all[i].map(c => c.id));
-    for (let j = i + 1; j < all.length - 1; j++) {
+    for (let j = i + 1; j < all.length; j++) {
       if (all[j].some(c => ids1.has(c.id))) continue;
       const ids12 = new Set([...ids1, ...all[j].map(c => c.id)]);
       for (let k = j + 1; k < all.length; k++) {
         if (all[k].some(c => ids12.has(c.id))) continue;
         const total = naturalPoints(all[i]) + naturalPoints(all[j]) + naturalPoints(all[k]);
         const used  = all[i].length + all[j].length + all[k].length;
-        if (total >= MIN_OPEN && used < hand.length) return true;
+        if (total >= MIN_OPEN && used < hand.length) return [all[i], all[j], all[k]];
       }
     }
   }
 
-  return false;
+  return null;
+}
+
+/** Provjera — može li igrač otvoriti igru s danom rukom. */
+function canPlayerOpenWith(hand) {
+  return findOpeningMeldsFor(hand) !== null;
 }
 
 function resolveCards(hand, cardIds) {

@@ -57,58 +57,66 @@
     <div class="topbar-right">
       <button id="btn-start"     class="btn-gold btn-sm">▶ Start</button>
       <button id="btn-new-round" class="btn-gold btn-sm" style="display:none">↺ Nova runda</button>
+      <button id="btn-leave"     class="btn-leave btn-sm" title="Napusti sobu">✕ Izlaz</button>
     </div>
   </header>
 
-  <!-- IGRAČI -->
-  <div id="players-bar"></div>
+  <!-- STOLNI RASPORED -->
+  <div id="game-board">
 
-  <!-- STOL -->
-  <main id="game-main">
+    <!-- Protivnik gore (2 ili 4 igrača) -->
+    <div id="opp-top" class="opp-panel opp-h" style="display:none"></div>
 
-    <!-- LIJEVA STRANA: kup + otpad -->
-    <div id="table-piles">
-      <div class="pile-wrap">
-        <div id="deck-pile" class="pile deck-back" title="Klikni za vučenje s kupa">
-          <div class="deck-pattern"></div>
+    <!-- Srednji red: lijevo / stol / desno -->
+    <div id="middle-row">
+      <div id="opp-left"  class="opp-panel opp-v" style="display:none"></div>
+
+      <!-- STOL -->
+      <main id="game-main">
+        <div id="table-piles">
+          <div class="pile-wrap">
+            <div id="deck-pile" class="pile deck-back" title="Klikni za vučenje s kupa">
+              <div class="deck-pattern"></div>
+            </div>
+            <div class="pile-label">Kup (<span id="deck-count">0</span>)</div>
+          </div>
+          <div class="pile-wrap">
+            <div id="discard-pile" class="pile" title="Klikni za uzimanje s otpada">
+              <span class="pile-empty-label">Otpad</span>
+            </div>
+            <div class="pile-label">Otpad</div>
+          </div>
         </div>
-        <div class="pile-label">Kup (<span id="deck-count">0</span>)</div>
-      </div>
-      <div class="pile-wrap">
-        <div id="discard-pile" class="pile" title="Klikni za uzimanje s otpada">
-          <span class="pile-empty-label">Otpad</span>
+        <div id="melds-area">
+          <div class="melds-empty">Stol je prazan — budi prvi koji položi kombinaciju!</div>
         </div>
-        <div class="pile-label">Otpad</div>
+      </main>
+
+      <div id="opp-right" class="opp-panel opp-v" style="display:none"></div>
+    </div>
+
+    <!-- RUKA + KONTROLE -->
+    <footer id="hand-footer">
+      <div id="my-info-bar"></div>
+      <div id="action-bar">
+        <div class="action-left">
+          <button id="btn-meld"           class="btn-action btn-green"  disabled>🃏 Dodaj meld</button>
+          <button id="btn-discard"        class="btn-action btn-red"    disabled>↩ Baci</button>
+          <button id="btn-open-game"      class="btn-action btn-green"  style="display:none">✅ Otvori igru!</button>
+          <button id="btn-cancel-opening" class="btn-action btn-gray"   style="display:none">↩ Poništi</button>
+        </div>
+        <div id="sel-info" class="sel-info"></div>
       </div>
-    </div>
+      <div id="opening-stage" style="display:none"></div>
+      <div id="hand-area"></div>
+    </footer>
 
-    <!-- SREDINA: meldovi -->
-    <div id="melds-area">
-      <div class="melds-empty">Stol je prazan — budi prvi koji položi kombinaciju!</div>
-    </div>
-
-  </main>
-
-  <!-- RUKA + KONTROLE -->
-  <footer id="hand-footer">
-    <div id="action-bar">
-      <div class="action-left">
-        <button id="btn-meld"           class="btn-action btn-green"  disabled>🃏 Dodaj meld</button>
-        <button id="btn-discard"        class="btn-action btn-red"    disabled>↩ Baci</button>
-        <button id="btn-open-game"      class="btn-action btn-green"  style="display:none">✅ Otvori igru!</button>
-        <button id="btn-cancel-opening" class="btn-action btn-gray"   style="display:none">↩ Poništi</button>
-      </div>
-      <div id="sel-info" class="sel-info"></div>
-    </div>
-    <!-- Staging area za otvaranje -->
-    <div id="opening-stage" style="display:none"></div>
-    <div id="hand-area"></div>
-  </footer>
+  </div><!-- /game-board -->
 
   <!-- CHAT (sklopivi) -->
   <div id="chat-panel">
-    <div id="chat-toggle" onclick="document.getElementById('chat-panel').classList.toggle('open')">
-      💬 Chat
+    <div id="chat-toggle" onclick="openChat()">
+      💬 Chat<span id="chat-badge" class="chat-badge" style="display:none"></span>
     </div>
     <div id="chat-body">
       <div id="chat-log"></div>

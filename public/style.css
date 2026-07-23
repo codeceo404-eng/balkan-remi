@@ -170,6 +170,20 @@ button:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important
 }
 .btn-gold.btn-sm { padding: 8px 16px; font-size: 13px; }
 
+.btn-leave {
+  background: rgba(180,40,40,0.18);
+  color: #f08080;
+  border: 1px solid rgba(180,40,40,0.35);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+.btn-leave:hover { background: rgba(180,40,40,0.35); color: #ffaaaa; }
+
 .btn-outline {
   background: transparent;
   border: 1px solid var(--gold);
@@ -263,17 +277,187 @@ button:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important
 .turn-mine   { color: #7fff7f !important; font-weight: 700; }
 .turn-other  { color: var(--text-muted); }
 
-/* ── PLAYERS BAR ───────────────────────────────────────────── */
-#players-bar {
+/* ── GAME BOARD (stolni raspored) ──────────────────────────── */
+#game-board {
   display: flex;
-  gap: 8px;
-  padding: 6px 14px;
-  background: rgba(0,0,0,0.2);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  flex-shrink: 0;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
 }
+#middle-row {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── PROTIVNIČKI PANELI ─────────────────────────────────────── */
+.opp-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.18);
+  border: 1px solid rgba(255,255,255,0.06);
+  position: relative;
+  transition: border-color .3s, background .3s;
+  gap: 8px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.opp-panel.opp-active {
+  border-color: rgba(212,168,67,0.5);
+  background: rgba(212,168,67,0.07);
+  box-shadow: inset 0 0 20px rgba(212,168,67,0.06);
+}
+.opp-panel.opp-eliminated { opacity: 0.38; filter: grayscale(0.5); }
+.opp-panel.opp-disconnected { opacity: 0.45; }
+
+/* Gore — horizontalni layout */
+.opp-h {
+  flex-direction: row;
+  padding: 8px 20px;
+  gap: 40px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  min-height: 88px;
+}
+/* Lijevo / desno — vertikalni layout */
+.opp-v {
+  flex-direction: column;
+  width: 82px;
+  padding: 10px 4px;
+  gap: 10px;
+  border-right: 1px solid rgba(255,255,255,0.06);
+}
+#opp-right { border-right: none; border-left: 1px solid rgba(255,255,255,0.06); }
+
+/* Sadržaj jednog sjedišta */
+.opp-seat { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.opp-h .opp-seat { flex-direction: row; align-items: center; gap: 14px; }
+
+/* Karte licem prema dolje */
+.opp-cards {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+}
+.opp-h .opp-cards { height: 56px; min-width: 44px; }
+.opp-v .opp-cards { width: 52px; height: 60px; justify-content: center; }
+
+.opp-card-back {
+  width: 34px;
+  height: 50px;
+  background: linear-gradient(135deg, #1c3a8a 60%, #1a2e6a);
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  position: absolute;
+  transform-origin: bottom center;
+  transition: transform .2s;
+  flex-shrink: 0;
+}
+/* Fan layout za karte (gore) */
+.opp-h .opp-card-back:nth-child(1)  { transform: rotate(-18deg) translateY(2px); left: 0; }
+.opp-h .opp-card-back:nth-child(2)  { transform: rotate(-10deg) translateY(1px); left: 8px; }
+.opp-h .opp-card-back:nth-child(3)  { transform: rotate(-3deg);                  left: 16px; }
+.opp-h .opp-card-back:nth-child(4)  { transform: rotate(4deg);                   left: 24px; }
+.opp-h .opp-card-back:nth-child(5)  { transform: rotate(11deg) translateY(1px);  left: 32px; }
+.opp-h .opp-card-back:nth-child(6)  { transform: rotate(18deg) translateY(2px);  left: 40px; }
+/* Vertikalni fan (lijevo/desno) */
+.opp-v .opp-card-back { position: static; transform: none; margin: -28px 0 0; }
+.opp-v .opp-card-back:first-child { margin-top: 0; }
+
+/* Dekorativni pattern na poleđini karte */
+.opp-card-back::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: repeating-linear-gradient(
+    45deg, transparent, transparent 3px,
+    rgba(255,255,255,0.04) 3px, rgba(255,255,255,0.04) 6px
+  );
+}
+
+/* Info ispod/pored karata */
+.opp-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+  min-width: 0;
+}
+.opp-h .opp-info { align-items: flex-start; text-align: left; }
+
+.opp-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
+}
+.opp-v .opp-name { font-size: 11px; max-width: 72px; }
+.opp-name.opp-name-active { color: var(--gold-light); }
+
+.opp-count { font-size: 11px; color: var(--text-muted); }
+.opp-opened { font-size: 11px; color: #7fff7f; }
+.opp-elim   { font-size: 11px; color: #ff6666; }
+
+.opp-turn-dot {
+  font-size: 10px;
+  color: var(--gold);
+  animation: last-card-blink 0.8s ease-in-out infinite alternate;
+}
+
+/* ── MOJ INFO BAR ───────────────────────────────────────────── */
+#my-info-bar {
+  padding: 4px 14px 2px;
+  min-height: 26px;
+}
+.my-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.my-name { font-weight: 700; color: var(--text-light); }
+.my-turn .my-name { color: var(--gold-light); }
+.my-turn-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #7fff7f;
+  animation: last-card-blink 0.9s ease-in-out infinite alternate;
+}
+
+/* ── ANIMACIJE ──────────────────────────────────────────────── */
+
+/* Novi meld pada na stol */
+@keyframes meld-enter {
+  from { opacity: 0; transform: translateY(18px) scale(0.88); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.meld.meld-new {
+  animation: meld-enter 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+/* Overlay round-over/game-over */
+@keyframes overlay-bg-in {
+  from { backdrop-filter: blur(0); background: rgba(0,0,0,0); }
+  to   { backdrop-filter: blur(3px); background: rgba(0,0,0,0.75); }
+}
+@keyframes overlay-card-in {
+  from { opacity: 0; transform: scale(0.85) translateY(24px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+#overlay.anim-in { animation: overlay-bg-in 0.28s ease-out forwards; }
+#overlay.anim-in #overlay-card { animation: overlay-card-in 0.35s cubic-bezier(0.22, 0.61, 0.36, 1) 0.05s both; }
+
+/* ── PLAYERS BAR (zastava — zadržan radi lobby prikaza) ────── */
 
 .player-chip {
   display: flex;
@@ -294,10 +478,25 @@ button:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important
   box-shadow: 0 0 10px rgba(212,168,67,0.2);
 }
 .player-chip.disconnected { opacity: 0.45; text-decoration: line-through; }
-.chip-score           { color: var(--text-muted); font-size: 11px; }
-.chip-score.chip-bad  { color: #ff9999; }
-.chip-score.chip-good { color: #7fff7f; }
+.player-chip.eliminated   { opacity: 0.4; filter: grayscale(0.6); border-color: #555; }
+.chip-score             { color: var(--text-muted); font-size: 11px; }
+.chip-score.chip-bad    { color: #ff9999; }
+.chip-score.chip-good   { color: #7fff7f; }
+.chip-score.chip-warn   { color: #ffaa44; font-weight: 700; }
+.chip-score.chip-danger { color: #ff4444; font-weight: 700; animation: last-card-blink 0.9s ease-in-out infinite alternate; }
+.chip-score.chip-eliminated { color: #888; }
+.chip-limit { color: var(--text-muted); font-size: 10px; opacity: 0.6; }
+.chip-elim  { color: #ff6666; font-size: 11px; }
 .chip-open  { color: #7fff7f; font-size: 11px; }
+/* Score limit input in topbar */
+#score-limit-wrap { display: inline-flex; align-items: center; gap: 4px; }
+.score-limit-lbl   { font-size: 11px; color: var(--text-muted); }
+.score-limit-input { width: 66px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 2px 5px; font-size: 12px; text-align: center; }
+/* Overlay: eliminated row & badge */
+.eliminated-row td { opacity: 0.55; }
+.badge-elim { background: #c00; color: #fff; border-radius: 4px; padding: 1px 5px; font-size: 10px; }
+.elim-notice { color: #ff7777; font-weight: 600; margin: 6px 0; font-size: 13px; }
+.score-danger { color: #ff4444 !important; font-weight: 700; }
 .chip-last-card {
   font-size: 10px;
   font-weight: 700;
@@ -422,19 +621,39 @@ button:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important
 }
 
 .meld {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
-  padding: 8px 10px;
+  position: relative;
+  /* Visina = visina karte + padding gore/dolje */
+  height: calc(78px + 16px);
+  /* Širina se računa u JS-u: --meld-cards = broj karata */
+  width: calc(var(--meld-cards, 3) * 30px + 54px + 8px);
+  min-width: 120px;
+  flex-shrink: 0;
+  padding: 8px 8px;
   border-radius: 10px;
-  background: rgba(255,255,255,0.1);
-  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.13);
   transition: background .2s, border .2s, box-shadow .2s;
   cursor: default;
+  overflow: visible;
 }
 .meld.drag-over {
   border-color: var(--gold);
   background: rgba(212,168,67,0.15);
+  box-shadow: 0 0 12px rgba(212,168,67,0.25);
+}
+
+/* Karte unutar melda — ravno preklapanje (fan bez rotacije) */
+.meld .card-sm {
+  position: absolute;
+  top: 8px;
+  left: calc(var(--card-pos, 0) * 30px + 8px);
+  transition: transform .15s, box-shadow .15s;
+  z-index: var(--card-pos, 0);
+}
+.meld .card-sm:hover {
+  transform: translateY(-8px);
+  z-index: 20;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.5);
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -641,6 +860,7 @@ button:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important
 #chat-toggle {
   width: 34px;
   flex-shrink: 0;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -657,6 +877,31 @@ button:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important
 }
 #chat-toggle::before { content: "💬"; font-size: 16px; margin-bottom: 6px; writing-mode: horizontal-tb; }
 #chat-toggle:hover { background: rgba(212,168,67,0.18); }
+
+.chat-badge {
+  position: absolute;
+  top: 6px;
+  right: 4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  background: #e03a3a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: horizontal-tb;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  animation: badge-pop .2s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes badge-pop {
+  from { transform: scale(0.4); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
 
 /* ── Tijelo chata ── */
 #chat-body { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-width: 0; }
@@ -788,6 +1033,112 @@ button:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important
 .toast.warn   { border-color: rgba(220,160,20,0.5); background: rgba(80,50,5,0.97);  }
 
 /* ────────────────────────────────────────────────────────────────
+   MOBILE OPPONENT CHIPS (opp-mobile-bar)
+   ──────────────────────────────────────────────────────────────── */
+.opp-mobile-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: rgba(0,0,0,0.25);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  flex-shrink: 0;
+  min-height: 58px;
+  scrollbar-width: none;
+}
+.opp-mobile-bar::-webkit-scrollbar { display: none; }
+
+.opp-mobile-chip {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 5px 8px 5px 6px;
+  min-width: 90px;
+  flex-shrink: 0;
+  position: relative;
+  transition: border-color .2s, background .2s;
+}
+.opp-mobile-chip.opp-chip-active {
+  border-color: #f6d860;
+  background: rgba(246,216,96,0.12);
+  box-shadow: 0 0 8px rgba(246,216,96,0.3);
+}
+.opp-mobile-chip.opp-chip-eliminated {
+  opacity: 0.35;
+  filter: grayscale(0.6);
+}
+.opp-mobile-chip.opp-chip-disconnected { opacity: 0.45; }
+
+/* Mini card backs inside chip */
+.opp-mini-cards {
+  display: flex;
+  flex-direction: row;
+  position: relative;
+  width: 28px;
+  height: 42px;
+  flex-shrink: 0;
+}
+.opp-card-mini {
+  position: absolute;
+  width: 22px;
+  height: 34px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #1a3a6e 0%, #0d2347 60%, #162c5a 100%);
+  border: 1px solid rgba(255,255,255,0.25);
+  box-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+}
+.opp-card-mini:nth-child(1) { left: 0;  top: 4px; transform: rotate(-6deg); }
+.opp-card-mini:nth-child(2) { left: 4px; top: 2px; transform: rotate(-2deg); }
+.opp-card-mini:nth-child(3) { left: 6px; top: 0;   transform: rotate(2deg); }
+.opp-card-mini:nth-child(4) { left: 5px; top: 1px; transform: rotate(5deg); }
+.opp-card-mini:nth-child(5) { left: 3px; top: 3px; transform: rotate(8deg); }
+
+.opp-chip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.opp-chip-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e8dcc8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
+.opp-chip-sub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.6);
+  flex-wrap: wrap;
+}
+.opp-chip-sub .chip-score {
+  font-size: 10px;
+  padding: 1px 4px;
+}
+
+/* Turn dot on chip */
+.opp-mobile-chip .opp-turn-dot {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-size: 8px;
+  color: #f6d860;
+  animation: pile-pulse 1s ease-in-out infinite;
+}
+
+/* ────────────────────────────────────────────────────────────────
    RESPONSIVE — MOBITEL
    ──────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
@@ -814,7 +1165,15 @@ button:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important
 
   /* ── Meldovi ── */
   #melds-area { padding: 8px; gap: 7px; }
-  .meld       { padding: 5px 7px; gap: 2px; }
+  .meld {
+    height: calc(60px + 14px);
+    width: calc(var(--meld-cards, 3) * 22px + 42px + 8px);
+    padding: 7px 7px;
+  }
+  .meld .card-sm {
+    top: 7px;
+    left: calc(var(--card-pos, 0) * 22px + 7px);
+  }
 
   /* ── Karte u ruci ── */
   .card-hand {
@@ -847,9 +1206,14 @@ button:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important
   /* ── Ruka ── */
   #hand-area { padding: 4px 8px 14px; min-height: 96px; }
 
-  /* ── Igrači ── */
-  #players-bar { padding: 4px 8px; gap: 5px; }
-  .player-chip { padding: 4px 8px; font-size: 11px; }
+  /* ── Protivnički paneli — na mobitelu koristimo mobile chips ── */
+  /* Sakrij bočne panele — sve ide u opp-mobile-bar (opp-top) */
+  #opp-left  { display: none !important; }
+  #opp-right { display: none !important; }
+  /* Middle row bez bočnih panela treba punu širinu */
+  #middle-row { gap: 0; }
+  /* opp-top sada je mobile bar */
+  #opp-top { padding: 0 !important; }
 
   /* ── Topbar ── */
   #topbar { padding: 6px 10px; }
@@ -881,4 +1245,65 @@ button:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important
   .card-sm .card-center { font-size: 10px; }
   .btn-action { padding: 6px 7px; font-size: 11px; }
   #hand-area  { padding: 2px 6px 10px; min-height: 82px; }
+  .meld {
+    height: calc(52px + 14px);
+    width: calc(var(--meld-cards, 3) * 18px + 36px + 8px);
+  }
+  .meld .card-sm {
+    top: 7px;
+    left: calc(var(--card-pos, 0) * 18px + 7px);
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   LANDSCAPE NA MOBITELU
+   ──────────────────────────────────────────────────────────────── */
+@media (orientation: landscape) and (max-height: 500px) {
+  /* Kompaktan topbar */
+  #topbar { padding: 3px 10px; }
+
+  /* Opp gore — skrij, previše prostora uzima */
+  #opp-top { display: none !important; }
+
+  /* Uži vertikalni paneli */
+  .opp-v { width: 56px; padding: 6px 2px; }
+  .opp-card-back { width: 24px; height: 34px; }
+  .opp-v .opp-card-back { margin-top: -22px; }
+  .opp-name { font-size: 10px; max-width: 50px; }
+
+  /* Kompaktniji #game-main */
+  #table-piles { padding: 6px 8px; gap: 8px; width: 90px; }
+  .pile { width: 52px; height: 74px; }
+
+  /* Manje karte u ruci */
+  .card-hand {
+    width: 44px; height: 62px;
+    transform-origin: 50% calc(100% + 15px);
+  }
+  .card-hand .card-corner { font-size: 9px; }
+  .card-hand .card-center { font-size: 13px; }
+  .card-hand.selected     { transform: rotate(var(--fan-rotate,0deg)) translateY(-10px) scale(1.03); }
+  .card-hand:hover:not(.selected):not(.dragging) { transform: rotate(var(--fan-rotate,0deg)) translateY(-8px); }
+
+  #hand-area { padding: 2px 8px 8px; min-height: 76px; }
+  #action-bar { padding: 3px 8px; }
+  .btn-action { padding: 5px 8px; font-size: 11px; }
+  #my-info-bar { padding: 2px 10px 0; }
+
+  /* Manje karte na stolu */
+  .card-sm { width: 36px; height: 52px; font-size: 10px; }
+  .card-sm .card-center { font-size: 10px; }
+  #melds-area { padding: 6px; gap: 5px; }
+  .meld {
+    height: calc(52px + 14px);
+    width: calc(var(--meld-cards, 3) * 20px + 36px + 8px);
+    padding: 7px 7px;
+  }
+  .meld .card-sm {
+    top: 7px;
+    left: calc(var(--card-pos, 0) * 20px + 7px);
+  }
+
+  /* Chat pozicija */
+  #chat-panel { top: 44px; bottom: 130px; }
 }

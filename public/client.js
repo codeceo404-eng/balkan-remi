@@ -54,8 +54,12 @@ const lblRoom      = $("lbl-room");
 const lblTurn      = $("lbl-turn");
 const btnStart     = $("btn-start");
 const btnNewRound  = $("btn-new-round");
+const btnLeave     = $("btn-leave");
 
-const playersBar   = $("players-bar");
+const oppTop       = $("opp-top");
+const oppLeft      = $("opp-left");
+const oppRight     = $("opp-right");
+const myInfoBar    = $("my-info-bar");
 const meldsArea    = $("melds-area");
 const deckPile     = $("deck-pile");
 const discardPile  = $("discard-pile");
@@ -93,6 +97,20 @@ document.querySelector(".topbar-right").insertBefore(
   btnAddBot,
   document.getElementById("btn-start")
 );
+
+// ── Bodovni prag (topbar, samo za host između rundi) ───────────────
+const scoreLimitWrap = document.createElement("label");
+scoreLimitWrap.id = "score-limit-wrap";
+scoreLimitWrap.style.display = "none";
+scoreLimitWrap.innerHTML = `<span class="score-limit-lbl">Prag:</span>
+<input id="input-score-limit" type="number" min="100" max="10000" step="100" value="2500" class="score-limit-input">
+<span class="score-limit-lbl">bod</span>`;
+document.querySelector(".topbar-right").insertBefore(
+  scoreLimitWrap,
+  document.getElementById("btn-start")
+);
+const inputScoreLimit = document.getElementById("input-score-limit");
+inputScoreLimit.onchange = () => socket.emit("setScoreLimit", roomId, inputScoreLimit.value);
 
 // Sortiranje — ciklički prelazi između: kombos → boja+rang
 let _sortMode = 0; // 0 = kombos, 1 = boja+rang
@@ -241,11 +259,16 @@ socket.on("gameStarted", () => {
 socket.on("state", state => {
   gameState = state;
   renderAll();
+
   // Bot dugme: samo host, samo lobby, max 3 igrača (4. slot slobodan)
-  const canAddBot = isHost
-    && state.phase === "lobby"
-    && state.players.length < 4;
+  const canAddBot = isHost && state.phase === "lobby" && state.players.length < 4;
   btnAddBot.style.display = canAddBot ? "inline-flex" : "none";
+
+  // Bodovni prag: host između rundi ili u lobbyu
+  const canSetLimit = isHost && ["lobby","ended"].includes(state.phase);
+  scoreLimitWrap.style.display = canSetLimit ? "inline-flex" : "none";
+  if (state.scoreLimit && document.activeElement !== inputScoreLimit)
+    inputScoreLimit.value = state.scoreLimit;
 });
 
 socket.on("yourHand", hand => {
@@ -268,6 +291,15 @@ btnStart.onclick    = () => socket.emit("startGame", roomId);
 btnNewRound.onclick = () => {
   overlay.style.display = "none";
   socket.emit("startGame", roomId);
+};
+btnLeave.onclick = () => {
+  if (!confirm("Napustiti sobu?")) return;
+  socket.emit("leaveRoom", roomId);
+  roomId    = null;
+  gameState = null;
+  localStorage.removeItem("remi_room");
+  overlay.style.display = "none";
+  switchScreen("lobby");
 };
 
 deckPile.onclick = () => {
@@ -370,47 +402,156 @@ function sendChat() {
 
 function renderAll() {
   if (!gameState) return;
-  renderPlayersBar();
+  renderTableSeats();
   renderTable();
   renderMelds();
   updateButtons();
 }
 
-// ── PLAYERS BAR ──────────────────────────────────────────────────
-let _wasMyturn = false; // za toast "tvoj red"
+// ── STOLNI RASPORED IGRAČA ────────────────────────────────────────
+let _wasMyturn = false;
 
-function renderPlayersBar() {
+/** Vraca poziciju ('bottom','top','left','right') za igrača na indexu i. */
+function seatFor(i) {
+  const players = gameState.players;
+  const n = players.length;
+  const myIdx = players.findIndex(p => p.id === socket.id);
+  if (myIdx === -1) return i === 0 ? 'top' : i === 1 ? 'bottom' : i === 2 ? 'left' : 'right';
+  const rel = (i - myIdx + n) % n;
+  if (rel === 0) return 'bottom';
+  if (n === 2) return 'top';
+  if (n === 3) return rel === 1 ? 'left' : 'right';
+  return rel === 1 ? 'left' : rel === 2 ? 'top' : 'right';
+}
+
+function scoreCssClass(p, scoreLimit) {
+  const r = p.totalScore / scoreLimit;
+  return p.eliminated ? 'chip-eliminated'
+       : r >= 0.9  ? 'chip-danger'
+       : r >= 0.75 ? 'chip-warn'
+       : p.totalScore > 0 ? 'chip-bad'
+       : p.totalScore < 0 ? 'chip-good' : '';
+}
+
+function renderTableSeats() {
   const { players, turn, phase } = gameState;
-  playersBar.innerHTML = "";
-  players.forEach((p, i) => {
-    const div = document.createElement("div");
-    div.className = "player-chip" +
-      (i === turn    ? " active"      : "") +
-      (!p.connected  ? " disconnected" : "") +
-      (p.opened      ? " opened"      : "");
-    div.innerHTML = `
-      <span class="chip-name">${escHtml(p.name)}</span>
-      <span class="chip-cards">${p.count}🃏</span>
-      ${p.count === 1 ? '<span class="chip-last-card">⚠ 1!</span>' : ""}
-      <span class="chip-score ${p.totalScore > 0 ? "chip-bad" : p.totalScore < 0 ? "chip-good" : ""}">${p.totalScore}</span>
-      ${p.opened ? '<span class="chip-open">✓</span>' : ""}
-    `;
-    playersBar.appendChild(div);
+  const scoreLimit = gameState.scoreLimit || 2500;
+  const isMobile   = window.innerWidth <= 640;
+
+  // Reset svih panela
+  [oppTop, oppLeft, oppRight].forEach(el => {
+    el.innerHTML = ''; el.style.display = 'none'; el.className = 'opp-panel';
   });
 
-  const cur = players[turn];
-  if (cur) {
-    const myTurn = isMyTurn();
-    lblTurn.textContent = myTurn ? "🟢 Tvoj red!" : `⏳ ${escHtml(cur.name)} igra...`;
-    lblTurn.className = myTurn ? "turn-mine" : "turn-other";
+  // Pronađi sebe
+  const myIdx = players.findIndex(p => p.id === socket.id);
 
-    // Toast samo kad red prijeđe NA mene (ne pri svakom renderu)
-    if (myTurn && !_wasMyturn && phase === "draw") {
-      showToast("🟢 Tvoj red!", "info");
-    }
-    _wasMyturn = myTurn;
+  if (isMobile) {
+    // ── MOBITEL: svi protivnici kao chipovi u #opp-top ─────────────
+    oppTop.classList.add('opp-mobile-bar');
+    let hasOpponents = false;
+
+    players.forEach((p, i) => {
+      const isActive = i === turn;
+      const sc = scoreCssClass(p, scoreLimit);
+
+      if (p.id === socket.id) {
+        // Moj info bar
+        myInfoBar.innerHTML = `
+          <div class="my-info ${isActive ? 'my-turn' : ''}">
+            <span class="my-name">${escHtml(p.name)}</span>
+            <span class="chip-score ${sc}">${p.totalScore}<span class="chip-limit">/${scoreLimit}</span></span>
+            ${p.opened ? '<span class="chip-open">✓</span>' : ''}
+            ${p.count === 1 ? '<span class="chip-last-card">⚠ ZADNJA!</span>' : ''}
+            ${isActive ? '<span class="my-turn-badge">● MOJ RED</span>' : ''}
+          </div>`;
+      } else {
+        // Protivnik kao chip
+        hasOpponents = true;
+        const mini = Math.min(p.count, 5);
+        const backs = Array.from({length: mini}, () => '<div class="opp-card-mini"></div>').join('');
+        const chip = document.createElement('div');
+        chip.className = 'opp-mobile-chip'
+          + (isActive   ? ' opp-chip-active'    : '')
+          + (p.eliminated ? ' opp-chip-eliminated' : '')
+          + (!p.connected ? ' opp-chip-disconnected' : '');
+        chip.innerHTML = `
+          <div class="opp-mini-cards">${backs}</div>
+          <div class="opp-chip-body">
+            <span class="opp-chip-name">${escHtml(p.name)}</span>
+            <span class="opp-chip-sub">
+              ${p.count}🃏
+              <span class="chip-score ${sc}">${p.totalScore}</span>
+              ${p.opened     ? '<span class="opp-opened">✓</span>' : ''}
+              ${p.eliminated ? '<span class="opp-elim">❌</span>' : ''}
+            </span>
+          </div>
+          ${isActive ? '<span class="opp-turn-dot">●</span>' : ''}`;
+        oppTop.appendChild(chip);
+      }
+    });
+
+    if (hasOpponents) oppTop.style.display = 'flex';
+
+  } else {
+    // ── DESKTOP: raspored oko stola ────────────────────────────────
+    oppTop.classList.add('opp-h');
+    oppLeft.classList.add('opp-v');
+    oppRight.classList.add('opp-v');
+
+    players.forEach((p, i) => {
+      const seat = seatFor(i);
+      const isActive = i === turn;
+      const sc = scoreCssClass(p, scoreLimit);
+
+      if (seat === 'bottom') {
+        myInfoBar.innerHTML = `
+          <div class="my-info ${isActive ? 'my-turn' : ''}">
+            <span class="my-name">${escHtml(p.name)}</span>
+            <span class="chip-score ${sc}">${p.totalScore}<span class="chip-limit">/${scoreLimit}</span></span>
+            ${p.opened ? '<span class="chip-open">✓ Otvoren</span>' : ''}
+            ${p.count === 1 ? '<span class="chip-last-card">⚠ ZADNJA!</span>' : ''}
+            ${isActive ? '<span class="my-turn-badge">● TVJ RED</span>' : ''}
+          </div>`;
+        return;
+      }
+
+      const el = seat === 'top' ? oppTop : seat === 'left' ? oppLeft : oppRight;
+      el.style.display = 'flex';
+      if (isActive)     el.classList.add('opp-active');
+      if (p.eliminated) el.classList.add('opp-eliminated');
+      if (!p.connected) el.classList.add('opp-disconnected');
+
+      const shown = Math.min(p.count, 6);
+      const backs = Array.from({length: shown}, () => '<div class="opp-card-back"></div>').join('');
+      el.innerHTML = `
+        <div class="opp-seat">
+          <div class="opp-cards">${backs}</div>
+          <div class="opp-info">
+            <span class="opp-name ${isActive ? 'opp-name-active' : ''}">${escHtml(p.name)}</span>
+            ${isActive ? '<span class="opp-turn-dot">●</span>' : ''}
+            <span class="opp-count">${p.count}🃏</span>
+            <span class="chip-score ${sc}">${p.totalScore}</span>
+            ${p.opened    ? '<span class="opp-opened">✓</span>' : ''}
+            ${p.eliminated ? '<span class="opp-elim">❌</span>'  : ''}
+            ${p.count === 1 ? '<span class="chip-last-card" style="font-size:10px">⚠1!</span>' : ''}
+          </div>
+        </div>`;
+    });
   }
+
+  // Topbar turn label (uvijek)
+  const cur = players[turn];
+  const myTurn = myIdx !== -1 && myIdx === turn;
+  if (cur) {
+    lblTurn.textContent = myTurn ? "🟢 Tvoj red!" : `⏳ ${escHtml(cur.name)} igra...`;
+    lblTurn.className   = myTurn ? "turn-mine" : "turn-other";
+  }
+  if (myTurn && !_wasMyturn && phase === "draw") showToast("🟢 Tvoj red!", "info");
+  _wasMyturn = myTurn;
 }
+
+function renderPlayersBar() { renderTableSeats(); }
 
 // ── STOL (kup + otpad) ───────────────────────────────────────────
 function renderTable() {
@@ -432,16 +573,21 @@ function renderTable() {
 }
 
 // ── MELDOVI ──────────────────────────────────────────────────────
+let _prevMeldCount = 0;
 function renderMelds() {
   meldsArea.innerHTML = "";
   if (!gameState.table.length) {
     meldsArea.innerHTML = `<div class="melds-empty">Stol je prazan — budi prvi koji položi kombinaciju!</div>`;
+    _prevMeldCount = 0;
     return;
   }
 
+  const curCount = gameState.table.length;
+
   gameState.table.forEach((meld, meldIdx) => {
     const div = document.createElement("div");
-    div.className = "meld";
+    // Novi meld (koji nije bio prošli put) dobiva animacijsku klasu
+    div.className = "meld" + (meldIdx >= _prevMeldCount ? " meld-new" : "");
 
     div.onclick = () => {
       // Tap na meld s 1 selektiranom kartom → addToMeld (korisno na mobitelu)
@@ -470,15 +616,22 @@ function renderMelds() {
       dragSource  = null;
     };
 
-    meld.forEach(c => {
+    // Postavi broj karata kao CSS varijablu za širinu melda
+    div.style.setProperty("--meld-cards", meld.length);
+
+    meld.forEach((c, pos) => {
       const el = document.createElement("div");
       el.className = "card card-sm " + cardColorClass(c);
       el.innerHTML = cardHTML(c, false);
+      // Pozicija u lepezi (ravno)
+      el.style.setProperty("--card-pos", pos);
       div.appendChild(el);
     });
 
     meldsArea.appendChild(div);
   });
+
+  _prevMeldCount = curCount;
 }
 
 // ── RUKA ─────────────────────────────────────────────────────────
@@ -712,17 +865,17 @@ function updateButtons() {
 //  ROUND OVER OVERLAY
 // ════════════════════════════════════════════════════════════════
 
-function showRoundOver({ winnerName, scores }) {
-  overlayTitle.textContent = `🏆 ${escHtml(winnerName)} pobijedio!`;
+function showRoundOver({ winnerName, scores, eliminated = [], scoreLimit = 2500 }) {
+  overlayTitle.textContent = `🏆 ${escHtml(winnerName)} pobijedio rundu!`;
 
-  // Redoslijed: najmanji ukupni score (= bolji) prve
   const sorted = [...scores].sort((a, b) => a.totalScore - b.totalScore);
 
   function roundLabel(s) {
     if (s.isWinner) return `−40 🏆`;
+    if (s.eliminated && s.roundScore === 0) return `—`;
     let label = `+${s.roundScore}`;
     const parts = [];
-    if (!s.opened) {
+    if (!s.opened && !s.isWinner) {
       const cardPts = s.roundScore - 100;
       parts.push(`karte: +${cardPts}`);
       parts.push(`nije otvorio: +100`);
@@ -730,16 +883,24 @@ function showRoundOver({ winnerName, scores }) {
     return parts.length ? `${label} <span class="score-detail">(${parts.join(", ")})</span>` : label;
   }
 
+  const elimNotice = eliminated.length
+    ? `<p class="elim-notice">❌ Eliminirani ovom rundom: <strong>${eliminated.map(escHtml).join(", ")}</strong> (prešli ${scoreLimit} bodova)</p>`
+    : "";
+
   overlayBody.innerHTML = `
-    <p class="score-note">Niži zbroj = bolji rezultat</p>
+    <p class="score-note">Niži zbroj = bolji rezultat &nbsp;|&nbsp; Prag: <strong>${scoreLimit}</strong> bod.</p>
+    ${elimNotice}
     <table class="score-table">
       <thead><tr><th>Igrač</th><th>Ova runda</th><th>Ukupno</th></tr></thead>
       <tbody>
         ${sorted.map(s => `
-          <tr class="${s.isWinner ? "winner-row" : ""} ${!s.opened && !s.isWinner ? "unopened-row" : ""}">
-            <td>${escHtml(s.name)}${!s.opened && !s.isWinner ? ' <span class="badge-unopened">nije otvorio</span>' : ''}</td>
+          <tr class="${s.isWinner ? "winner-row" : ""} ${s.eliminated ? "eliminated-row" : ""} ${!s.opened && !s.isWinner && !s.eliminated ? "unopened-row" : ""}">
+            <td>${escHtml(s.name)}
+              ${!s.opened && !s.isWinner && !s.eliminated ? ' <span class="badge-unopened">nije otvorio</span>' : ''}
+              ${s.eliminated ? ' <span class="badge-elim">❌</span>' : ''}
+            </td>
             <td class="${s.isWinner ? "neg" : "pos"}">${roundLabel(s)}</td>
-            <td class="${s.totalScore <= 0 ? "neg" : "pos"}">${s.totalScore}</td>
+            <td class="${s.totalScore <= 0 ? "neg" : s.totalScore >= scoreLimit * 0.9 ? "score-danger" : "pos"}">${s.totalScore}</td>
           </tr>
         `).join("")}
       </tbody>
@@ -752,12 +913,63 @@ function showRoundOver({ winnerName, scores }) {
     socket.emit("startGame", roomId);
   };
   overlay.style.display = "flex";
+  overlay.classList.remove("anim-in");
+  void overlay.offsetWidth; // reflow da resetira animaciju
+  overlay.classList.add("anim-in");
   if (isHost) btnNewRound.style.display = "inline-flex";
 }
+
+socket.on("gameOver", ({ winnerName, scores }) => {
+  overlayTitle.textContent = `🎉 Kraj igre! Pobjednik: ${escHtml(winnerName)}`;
+  overlayBody.innerHTML = `
+    <p class="score-note">Konačni poredak</p>
+    <table class="score-table">
+      <thead><tr><th>#</th><th>Igrač</th><th>Ukupno</th><th>Status</th></tr></thead>
+      <tbody>
+        ${scores.map((s, i) => `
+          <tr class="${i === 0 && !s.eliminated ? "winner-row" : ""} ${s.eliminated ? "eliminated-row" : ""}">
+            <td>${i + 1}.</td>
+            <td>${escHtml(s.name)}</td>
+            <td class="${s.totalScore <= 0 ? "neg" : "pos"}">${s.totalScore}</td>
+            <td>${s.eliminated ? "❌ Eliminiran" : i === 0 ? "🏆 Pobjednik" : "✅"}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+  overlayBtn.textContent = "🔄 Nova igra";
+  overlayBtn.disabled    = false;
+  overlayBtn.onclick     = () => {
+    overlay.style.display = "none";
+    if (isHost) socket.emit("restartGame", roomId);
+    btnNewRound.style.display = "none";
+    btnStart.style.display    = isHost ? "inline-flex" : "none";
+  };
+  overlay.style.display = "flex";
+  overlay.classList.remove("anim-in");
+  void overlay.offsetWidth; // reflow da resetira animaciju
+  overlay.classList.add("anim-in");
+  btnNewRound.style.display = "none";
+});
 
 // ════════════════════════════════════════════════════════════════
 //  CHAT
 // ════════════════════════════════════════════════════════════════
+
+let _unreadChat = 0;
+
+function openChat() {
+  const panel = $("chat-panel");
+  panel.classList.toggle("open");
+  if (panel.classList.contains("open")) {
+    // Reset badge pri otvaranju
+    _unreadChat = 0;
+    const badge = $("chat-badge");
+    badge.style.display = "none";
+    badge.textContent = "";
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+}
 
 function addChat(msg) {
   const div = document.createElement("div");
@@ -767,6 +979,15 @@ function addChat(msg) {
     : `<strong>${escHtml(msg.name)}:</strong> ${escHtml(msg.text)}`;
   chatLog.appendChild(div);
   chatLog.scrollTop = chatLog.scrollHeight;
+
+  // Badge — samo ako je chat zatvoren i nije systemska poruka
+  const panel = $("chat-panel");
+  if (!panel.classList.contains("open") && !msg.system) {
+    _unreadChat++;
+    const badge = $("chat-badge");
+    badge.textContent = _unreadChat > 9 ? "9+" : _unreadChat;
+    badge.style.display = "inline-flex";
+  }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1106,4 +1327,14 @@ window.addEventListener("load", () => {
     inputName.value = savedName;
     btnReconnect.style.display = "block";
   }
+});
+
+// Re-render raspored kad se promijeni veličina/orijentacija ekrana
+let _resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => { if (gameState) renderAll(); }, 150);
+});
+window.addEventListener("orientationchange", () => {
+  setTimeout(() => { if (gameState) renderAll(); }, 300);
 });
