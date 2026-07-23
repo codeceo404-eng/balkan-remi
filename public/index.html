@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Remi 51</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  LOBBY EKRAN                                              -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="screen-lobby">
+  <div class="lobby-card">
+    <div class="lobby-logo">
+      <span class="logo-suit red">♥</span>
+      <span class="logo-title">Remi 51</span>
+      <span class="logo-suit black">♠</span>
+    </div>
+    <p class="lobby-subtitle">Balkanski remi za 2–4 igrača</p>
+
+    <div class="lobby-fields">
+      <input id="input-name" type="text" placeholder="Vaše ime" maxlength="20" autocomplete="off">
+
+      <button id="btn-create" class="btn-gold">✦ Kreiraj novu sobu</button>
+
+      <div class="lobby-divider"><span>ili se pridruži</span></div>
+
+      <div class="join-row">
+        <input id="input-room" type="text" placeholder="KOD SOBE" maxlength="5" autocomplete="off">
+        <button id="btn-join" class="btn-outline">Pridruži se</button>
+      </div>
+
+      <button id="btn-reconnect" class="btn-ghost" style="display:none">
+        ↩ Vrati se u zadnju sobu
+      </button>
+    </div>
+
+    <div id="lobby-error" class="lobby-error" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  GAME EKRAN                                               -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="screen-game" style="display:none">
+
+  <!-- TOPBAR -->
+  <header id="topbar">
+    <div class="topbar-left">
+      <span id="lbl-room" class="room-badge">🃏 SOBA: ---</span>
+      <span id="lbl-turn" class="turn-label">Čeka početak...</span>
+    </div>
+    <div class="topbar-right">
+      <button id="btn-start"     class="btn-gold btn-sm">▶ Start</button>
+      <button id="btn-new-round" class="btn-gold btn-sm" style="display:none">↺ Nova runda</button>
+    </div>
+  </header>
+
+  <!-- IGRAČI -->
+  <div id="players-bar"></div>
+
+  <!-- STOL -->
+  <main id="game-main">
+
+    <!-- LIJEVA STRANA: kup + otpad -->
+    <div id="table-piles">
+      <div class="pile-wrap">
+        <div id="deck-pile" class="pile deck-back" title="Klikni za vučenje s kupa">
+          <div class="deck-pattern"></div>
+        </div>
+        <div class="pile-label">Kup (<span id="deck-count">0</span>)</div>
+      </div>
+      <div class="pile-wrap">
+        <div id="discard-pile" class="pile" title="Klikni za uzimanje s otpada">
+          <span class="pile-empty-label">Otpad</span>
+        </div>
+        <div class="pile-label">Otpad</div>
+      </div>
+    </div>
+
+    <!-- SREDINA: meldovi -->
+    <div id="melds-area">
+      <div class="melds-empty">Stol je prazan — budi prvi koji položi kombinaciju!</div>
+    </div>
+
+  </main>
+
+  <!-- RUKA + KONTROLE -->
+  <footer id="hand-footer">
+    <div id="action-bar">
+      <div class="action-left">
+        <button id="btn-meld"           class="btn-action btn-green"  disabled>🃏 Dodaj meld</button>
+        <button id="btn-discard"        class="btn-action btn-red"    disabled>↩ Baci</button>
+        <button id="btn-swap-joker"     class="btn-action btn-purple" style="display:none">⇄ Zamijeni jokera</button>
+        <button id="btn-cancel-swap"    class="btn-action btn-gray"   style="display:none">✕ Odustani</button>
+        <button id="btn-open-game"      class="btn-action btn-green"  style="display:none">✅ Otvori igru!</button>
+        <button id="btn-cancel-opening" class="btn-action btn-gray"   style="display:none">↩ Poništi</button>
+      </div>
+      <div id="sel-info" class="sel-info"></div>
+    </div>
+    <!-- Staging area za otvaranje -->
+    <div id="opening-stage" style="display:none"></div>
+    <div id="hand-area"></div>
+  </footer>
+
+  <!-- CHAT (sklopivi) -->
+  <div id="chat-panel">
+    <div id="chat-toggle" onclick="document.getElementById('chat-panel').classList.toggle('open')">
+      💬 Chat
+    </div>
+    <div id="chat-body">
+      <div id="chat-log"></div>
+      <div id="chat-input-row">
+        <input id="chat-input" type="text" placeholder="Poruka..." maxlength="200" autocomplete="off">
+        <button id="btn-chat" class="btn-gold btn-sm">↵</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /screen-game -->
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  ROUND OVER OVERLAY                                        -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="overlay" style="display:none">
+  <div id="overlay-card">
+    <h2 id="overlay-title"></h2>
+    <div id="overlay-body"></div>
+    <button id="overlay-btn" class="btn-gold">▶ Nova runda</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="client.js"></script>
+</body>
+</html>

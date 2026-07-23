@@ -1,0 +1,852 @@
+/* ════════════════════════════════════════════════════════════════
+   BALKANSKI REMI — Stilovi
+   Aesthetika: tamni luksuzni zeleni stol, zlatni detalji, Cinzel font
+   ════════════════════════════════════════════════════════════════ */
+
+:root {
+  --felt:        #1a6b3a;
+  --felt-dark:   #0f4524;
+  --felt-light:  #217a44;
+  --gold:        #d4a843;
+  --gold-light:  #f0cc77;
+  --gold-dark:   #a07820;
+  --card-bg:     #fff;
+  --card-radius: 9px;
+  --red:         #cc2222;
+  --black:       #111;
+  --text-light:  rgba(255,255,255,0.92);
+  --text-muted:  rgba(255,255,255,0.55);
+  --shadow:      0 8px 32px rgba(0,0,0,0.55);
+  --shadow-card: 0 4px 14px rgba(0,0,0,0.5);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: 'Lato', sans-serif;
+  background: var(--felt-dark);
+  color: var(--text-light);
+  overflow: hidden;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   LOBBY
+   ──────────────────────────────────────────────────────────────── */
+#screen-lobby {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(26,107,58,0.6) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 50%, rgba(15,69,36,0.8) 0%, transparent 60%),
+    #0a2e16;
+  padding: 20px;
+}
+
+.lobby-card {
+  background: rgba(12, 42, 22, 0.92);
+  border: 1px solid rgba(212, 168, 67, 0.35);
+  border-radius: 18px;
+  padding: 44px 40px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(212,168,67,0.15);
+  text-align: center;
+}
+
+.lobby-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+.logo-title {
+  font-family: 'Cinzel', serif;
+  font-size: 38px;
+  font-weight: 700;
+  color: var(--gold);
+  text-shadow: 0 2px 12px rgba(212,168,67,0.4);
+  letter-spacing: 2px;
+}
+.logo-suit {
+  font-size: 32px;
+  line-height: 1;
+}
+.logo-suit.red   { color: #e03333; }
+.logo-suit.black { color: var(--text-light); }
+
+.lobby-subtitle {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 32px;
+  letter-spacing: 0.5px;
+}
+
+.lobby-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+input[type="text"] {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(212,168,67,0.3);
+  background: rgba(255,255,255,0.07);
+  color: white;
+  font-size: 16px;
+  font-family: 'Lato', sans-serif;
+  outline: none;
+  transition: border .2s, box-shadow .2s;
+  text-align: center;
+}
+input[type="text"]::placeholder { color: rgba(255,255,255,0.35); }
+input[type="text"]:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(212,168,67,0.15);
+}
+#input-room { text-transform: uppercase; letter-spacing: 3px; font-weight: 700; }
+
+.join-row {
+  display: flex;
+  gap: 8px;
+}
+.join-row input { flex: 1; }
+
+.lobby-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.lobby-divider::before,
+.lobby-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255,255,255,0.15);
+}
+
+.lobby-error {
+  background: rgba(200,50,50,0.2);
+  border: 1px solid rgba(200,50,50,0.4);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 14px;
+  color: #ff9999;
+  margin-top: 4px;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   GUMBI
+   ──────────────────────────────────────────────────────────────── */
+button {
+  font-family: 'Lato', sans-serif;
+  cursor: pointer;
+  border: none;
+  transition: transform .12s, opacity .12s, box-shadow .12s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
+button:active:not(:disabled) { transform: translateY(0); }
+button:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important; }
+
+.btn-gold {
+  background: linear-gradient(135deg, var(--gold-light), var(--gold));
+  color: #1a0a00;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 12px 24px;
+  border-radius: 9px;
+  letter-spacing: 0.3px;
+}
+.btn-gold.btn-sm { padding: 8px 16px; font-size: 13px; }
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 15px;
+  padding: 12px 20px;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+.btn-outline:hover:not(:disabled) { background: rgba(212,168,67,0.1); }
+
+.btn-ghost {
+  background: rgba(255,255,255,0.07);
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.btn-action {
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.btn-green  { background: #2e7d32; color: #fff; }
+.btn-green:hover:not(:disabled) { background: #388e3c; }
+.btn-red    { background: #c62828; color: #fff; }
+.btn-red:hover:not(:disabled)   { background: #d32f2f; }
+.btn-purple { background: #6a1b9a; color: #fff; }
+.btn-purple:hover:not(:disabled){ background: #7b1fa2; }
+.btn-gray   { background: rgba(255,255,255,0.12); color: var(--text-light); border: 1px solid rgba(255,255,255,0.2); }
+
+/* ────────────────────────────────────────────────────────────────
+   GAME LAYOUT
+   ──────────────────────────────────────────────────────────────── */
+#screen-game {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh; /* dinamička visina — ispravlja iOS Safari address bar problem */
+  background:
+    radial-gradient(ellipse at center, var(--felt) 0%, var(--felt-dark) 100%);
+  background-attachment: fixed;
+}
+
+/* Felt texture overlay */
+#screen-game::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+  pointer-events: none;
+  z-index: 0;
+}
+
+#screen-game > * { position: relative; z-index: 1; }
+
+/* ── TOPBAR ─────────────────────────────────────────────────── */
+#topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(0,0,0,0.35);
+  border-bottom: 1px solid rgba(212,168,67,0.2);
+  flex-shrink: 0;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.topbar-left  { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.topbar-right { display: flex; gap: 8px; }
+
+.room-badge {
+  font-family: 'Cinzel', serif;
+  font-size: 15px;
+  color: var(--gold);
+  letter-spacing: 1px;
+}
+.turn-label  { font-size: 14px; color: var(--text-muted); }
+.turn-mine   { color: #7fff7f !important; font-weight: 700; }
+.turn-other  { color: var(--text-muted); }
+
+/* ── PLAYERS BAR ───────────────────────────────────────────── */
+#players-bar {
+  display: flex;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(0,0,0,0.2);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.player-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.12);
+  font-size: 13px;
+  transition: all .3s;
+}
+.player-chip.active {
+  background: rgba(212,168,67,0.25);
+  border-color: var(--gold);
+  color: var(--gold-light);
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(212,168,67,0.2);
+}
+.player-chip.disconnected { opacity: 0.45; text-decoration: line-through; }
+.chip-score      { color: var(--text-muted); font-size: 11px; }
+.chip-score.chip-bad  { color: #ff9999; }   /* visok score = loš */
+.chip-score.chip-good { color: #7fff7f; }   /* nizak/negativan = dobar */
+.chip-open  { color: #7fff7f; font-size: 11px; }
+
+/* ── GAME MAIN ─────────────────────────────────────────────── */
+#game-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  gap: 0;
+  min-height: 0;
+}
+
+/* ── KUP I OTPAD ───────────────────────────────────────────── */
+#table-piles {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 14px 12px;
+  background: rgba(0,0,0,0.15);
+  border-right: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+  width: 120px;
+}
+
+.pile-wrap { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.pile-label { font-size: 11px; color: var(--text-muted); }
+
+.pile {
+  width: 78px;
+  height: 112px;
+  border-radius: var(--card-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+  transition: transform .18s, box-shadow .18s, border .18s;
+  border: 2px solid transparent;
+  position: relative;
+  overflow: hidden;
+  font-size: 18px;
+  background: var(--card-bg);
+  color: #111;
+  line-height: 1.2;
+  text-align: center;
+}
+.pile .card-center { font-size: 16px; }
+
+.pile.active-pile {
+  border-color: var(--gold);
+  box-shadow: 0 0 18px rgba(212,168,67,0.45), var(--shadow-card);
+}
+.pile.clickable:hover {
+  transform: scale(1.07);
+  box-shadow: 0 0 22px rgba(212,168,67,0.55), var(--shadow-card);
+}
+.pile.empty-pile {
+  background: rgba(255,255,255,0.05);
+  border: 2px dashed rgba(255,255,255,0.2);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.pile-empty-label { color: var(--text-muted); font-size: 12px; }
+
+/* Kup — lijepa stratica */
+.deck-back {
+  background: #1c3a8a;
+  cursor: pointer;
+}
+.deck-pattern {
+  position: absolute;
+  inset: 4px;
+  border-radius: 5px;
+  border: 2px solid rgba(255,255,255,0.15);
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255,255,255,0.04),
+    rgba(255,255,255,0.04) 3px,
+    transparent 3px,
+    transparent 8px
+  );
+}
+
+/* ── MELDOVI ────────────────────────────────────────────────── */
+#melds-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(212,168,67,0.3) transparent;
+}
+
+.melds-empty {
+  width: 100%;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding-top: 30px;
+  font-style: italic;
+}
+
+.meld {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  transition: background .2s, border .2s, box-shadow .2s;
+  cursor: default;
+}
+.meld.swap-target {
+  border-color: #b39ddb;
+  background: rgba(103,58,183,0.25);
+  box-shadow: 0 0 12px rgba(103,58,183,0.4);
+  cursor: pointer;
+}
+.meld.drag-over {
+  border-color: var(--gold);
+  background: rgba(212,168,67,0.15);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   KARTE
+   ──────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--card-bg);
+  border-radius: var(--card-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  user-select: none;
+  transition: transform .15s, box-shadow .15s, border .15s;
+  font-family: 'Lato', sans-serif;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  overflow: hidden;
+}
+.card.red   { color: var(--red); }
+.card.black { color: var(--black); }
+.card.joker { color: #555; }
+
+/* Karte u ruci — lepeza/fan */
+.card-hand {
+  width: 70px;
+  height: 100px;
+  font-size: 0;
+  cursor: pointer;
+  border: 2px solid transparent;
+  box-shadow: var(--shadow-card);
+  flex-shrink: 0;
+  /* Pivot 60px ispod dna karte — karte se rotiraju kao u pravoj ruci */
+  transform-origin: 50% calc(100% + 60px);
+  transform: rotate(var(--fan-rotate, 0deg));
+  transition: transform .15s ease, box-shadow .15s, border-color .15s, opacity .15s;
+}
+.card-hand:hover:not(.selected):not(.dragging) {
+  transform: rotate(var(--fan-rotate, 0deg)) translateY(-22px);
+  z-index: 50 !important;
+}
+.card-hand.selected {
+  border-color: var(--gold);
+  box-shadow: 0 10px 24px rgba(212,168,67,0.45);
+  transform: rotate(var(--fan-rotate, 0deg)) translateY(-30px);
+  z-index: 40 !important;
+}
+
+/* Drag stanja */
+.card-hand.dragging {
+  opacity: 0.35;
+  transform: rotate(var(--fan-rotate, 0deg)) !important;
+  box-shadow: none !important;
+}
+/* Karta je stagirana za otvaranje */
+.card-hand.staged {
+  opacity: 0.55;
+  border: 2px solid var(--gold);
+  transform: rotate(var(--fan-rotate, 0deg)) translateY(-12px);
+}
+
+/* Indikator gdje će karta biti ubačena — zlatna crta */
+.card-hand.drag-insert-before {
+  box-shadow: -5px 0 0 2px var(--gold), var(--shadow-card);
+  border-left-color: var(--gold);
+}
+.card-hand.drag-insert-after {
+  box-shadow: 5px 0 0 2px var(--gold), var(--shadow-card);
+  border-right-color: var(--gold);
+}
+.card-hand .card-corner {
+  position: absolute;
+  font-size: 13px;
+  line-height: 1.1;
+  font-weight: 700;
+}
+.card-hand .card-corner.tl { top: 4px; left: 5px; text-align: left; }
+.card-hand .card-corner.br { bottom: 4px; right: 5px; text-align: right; transform: rotate(180deg); }
+.card-hand .card-center {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* Manje karte u meldovima */
+.card-sm {
+  width: 54px;
+  height: 78px;
+  font-size: 15px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+  border: 1px solid rgba(0,0,0,0.08);
+}
+.card-sm .card-center { font-size: 14px; }
+.card-sm:hover { transform: none; }
+
+/* Joker emoji */
+.joker-emoji { font-size: 32px; }
+.card-sm .joker-emoji { font-size: 24px; }
+
+/* ────────────────────────────────────────────────────────────────
+   RUKA I KONTROLE
+   ──────────────────────────────────────────────────────────────── */
+#hand-footer {
+  flex-shrink: 0;
+  background: rgba(0,0,0,0.35);
+  border-top: 1px solid rgba(212,168,67,0.15);
+}
+
+#action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 14px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.action-left {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.sel-info {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ── Staging area za otvaranje ── */
+#opening-stage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 14px 4px;
+  background: rgba(212,168,67,0.10);
+  border-top: 1px solid rgba(212,168,67,0.25);
+  flex-wrap: wrap;
+  min-height: 36px;
+}
+.opening-meld-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--gold-dark);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 13px;
+  color: var(--gold-light);
+}
+.opening-meld-chip .chip-remove {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-left: 4px;
+}
+.opening-meld-chip .chip-remove:hover { color: #e05050; }
+.opening-stage-pts {
+  font-size: 13px;
+  color: var(--gold-light);
+  font-weight: 700;
+  margin-left: auto;
+}
+.opening-stage-pts.ok  { color: #5fd46a; }
+.opening-stage-pts.bad { color: #e07070; }
+
+#hand-area {
+  display: flex;
+  justify-content: center;
+  flex-wrap: nowrap;   /* sve karte u jednom redu */
+  gap: 0;             /* razmak kontrolira JS (margin-left) */
+  padding: 10px 20px 32px;
+  min-height: 140px;
+  align-items: flex-end;
+  overflow: visible;  /* rotirana karta smije izlaziti izvan containera */
+}
+
+/* ────────────────────────────────────────────────────────────────
+   CHAT
+   ──────────────────────────────────────────────────────────────── */
+#chat-panel {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: 260px;
+  background: rgba(8, 28, 15, 0.97);
+  border-top-left-radius: 12px;
+  border: 1px solid rgba(212,168,67,0.2);
+  border-right: none;
+  border-bottom: none;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  max-height: 44px;
+  transition: max-height .3s;
+  overflow: hidden;
+}
+#chat-panel.open { max-height: 320px; }
+
+#chat-toggle {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold);
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+#chat-toggle:hover { background: rgba(212,168,67,0.08); }
+
+#chat-body { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+
+#chat-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.2) transparent;
+}
+.chat-msg         { margin-bottom: 4px; word-break: break-word; }
+.chat-msg.system  { color: var(--text-muted); font-style: italic; }
+.chat-msg strong  { color: var(--gold-light); }
+
+#chat-input-row {
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+#chat-input { flex: 1; font-size: 13px; padding: 6px 10px; text-align: left; }
+
+/* ────────────────────────────────────────────────────────────────
+   OVERLAY (runda gotova)
+   ──────────────────────────────────────────────────────────────── */
+#overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+  backdrop-filter: blur(3px);
+}
+#overlay-card {
+  background: rgba(10,30,16,0.97);
+  border: 1px solid rgba(212,168,67,0.4);
+  border-radius: 16px;
+  padding: 40px 44px;
+  max-width: 460px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+}
+#overlay-title {
+  font-family: 'Cinzel', serif;
+  font-size: 28px;
+  color: var(--gold);
+  margin-bottom: 24px;
+}
+#overlay-body { margin-bottom: 28px; }
+
+.score-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.score-table th {
+  font-family: 'Cinzel', serif;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.score-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.score-table .winner-row td:first-child { color: var(--gold); font-weight: 700; }
+.score-table .unopened-row td { opacity: 0.8; }
+/* U sustavu kazni: niži = bolji, pa je neg (−) zeleno, pos (+) crveno */
+.score-table .pos { color: #ff8888; }
+.score-table .neg { color: #7fff7f; }
+.score-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 10px;
+  font-style: italic;
+}
+.score-detail {
+  font-size: 11px;
+  opacity: 0.7;
+}
+.badge-unopened {
+  display: inline-block;
+  font-size: 10px;
+  background: rgba(220,80,80,0.25);
+  color: #ff9999;
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   TOAST
+   ──────────────────────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-16px);
+  background: rgba(20,20,20,0.96);
+  color: white;
+  padding: 11px 22px;
+  border-radius: 9px;
+  font-size: 14px;
+  border: 1px solid rgba(255,255,255,0.15);
+  z-index: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s, transform .25s;
+  max-width: 80vw;
+  text-align: center;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.toast.error  { border-color: rgba(200,50,50,0.5);  background: rgba(100,10,10,0.97); }
+.toast.info   { border-color: rgba(80,140,255,0.4); background: rgba(10,30,80,0.97); }
+.toast.warn   { border-color: rgba(220,160,20,0.5); background: rgba(80,50,5,0.97);  }
+
+/* ────────────────────────────────────────────────────────────────
+   RESPONSIVE — MOBITEL
+   ──────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+
+  /* ── Game layout: kup+otpad horizontalno na vrhu, meldovi ispod ── */
+  #game-main {
+    flex-direction: column;
+  }
+  #table-piles {
+    flex-direction: row;
+    width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding: 8px 20px;
+    justify-content: center;
+    gap: 32px;
+    flex-shrink: 0;
+  }
+  .pile-wrap  { flex-direction: row; align-items: center; gap: 8px; }
+  .pile-label { margin: 0; }
+  .pile       { width: 58px; height: 82px; }
+  .pile .card-center { font-size: 13px; }
+
+  /* ── Meldovi ── */
+  #melds-area { padding: 8px; gap: 7px; }
+  .meld       { padding: 5px 7px; gap: 2px; }
+
+  /* ── Karte u ruci ── */
+  .card-hand {
+    width: 54px;
+    height: 78px;
+    /* Pivot bliže dnu karte — karte ne idu toliko nisko na mobitelu */
+    transform-origin: 50% calc(100% + 20px);
+  }
+  .card-hand .card-corner { font-size: 10px; }
+  .card-hand .card-center { font-size: 14px; }
+  .card-hand.selected {
+    transform: rotate(var(--fan-rotate, 0deg)) translateY(-16px);
+    z-index: 40 !important;
+  }
+  .card-hand:hover:not(.selected):not(.dragging) {
+    transform: rotate(var(--fan-rotate, 0deg)) translateY(-14px);
+  }
+
+  /* ── Karte na stolu ── */
+  .card-sm { width: 42px; height: 60px; font-size: 11px; }
+  .card-sm .card-center { font-size: 11px; }
+
+  /* ── Akcijski bar — kompaktniji, wrap ── */
+  #action-bar  { padding: 5px 8px; gap: 4px; }
+  .action-left { gap: 4px; flex-wrap: wrap; }
+  .btn-action  { padding: 7px 10px; font-size: 12px; }
+  .sel-info    { font-size: 11px; }
+
+  /* ── Ruka ── */
+  #hand-area { padding: 4px 8px 14px; min-height: 96px; }
+
+  /* ── Igrači ── */
+  #players-bar { padding: 4px 8px; gap: 5px; }
+  .player-chip { padding: 4px 8px; font-size: 11px; }
+
+  /* ── Topbar ── */
+  #topbar { padding: 6px 10px; }
+  .room-badge { font-size: 13px; }
+  .btn-gold.btn-sm { padding: 6px 12px; font-size: 12px; }
+
+  /* ── Chat — uži na mobitelu ── */
+  #chat-panel { width: 200px; }
+
+  /* ── Lobby ── */
+  .lobby-card { padding: 30px 22px; }
+  .logo-title { font-size: 30px; }
+}
+
+@media (max-width: 400px) {
+  .card-hand {
+    width: 46px;
+    height: 66px;
+    transform-origin: 50% calc(100% + 15px);
+  }
+  .card-hand .card-corner { font-size: 9px; }
+  .card-hand .card-center { font-size: 12px; }
+  .pile       { width: 50px; height: 72px; }
+  .card-sm    { width: 36px; height: 52px; font-size: 10px; }
+  .card-sm .card-center { font-size: 10px; }
+  .btn-action { padding: 6px 7px; font-size: 11px; }
+  #hand-area  { padding: 2px 6px 10px; min-height: 82px; }
+}
