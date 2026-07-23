@@ -18,6 +18,56 @@ const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, { pingTimeout: 60000 });
 
+// ── BOT CHAT PORUKE ───────────────────────────────────────────────
+const BOT_CHAT_LINES = [
+  "Imam plan. Nadam se da i karte imaju isti plan.",
+  "Ovo nije sreća, ovo je algoritam. (Uglavnom sreća.)",
+  "Joker? Koji joker? Ja ne vidim nikakav joker. 😇",
+  "Znam svaki vaš potez. Samo se pravim da ne znam.",
+  "Moji živci su od čelika. Jer ih nemam.",
+  "Mogu računati karte. Ali ne znam zašto mi to ne pomaže.",
+  "Strateška pauza. (Nisam znao što baciti.)",
+  "Mislim da sam upravo pobijedio. Ili izgubio. Jedno od toga.",
+  "U drugoj igri sam bio nepobjediv. U ovoj se tek zagrijavam.",
+  "Analiza situacije: loša. Šanse za pobjedu: prisutne.",
+  "Čujem vas kako razmišljate. Prestanite.",
+  "Ovo je remi, ne poker. Ali blefam svejedno.",
+  "Svaka bačena karta je mudra odluka. Neke mudrije od drugih.",
+  "Ne brini, i ja bih nešto bacio da imam što baciti.",
+  "Moje karte su kao horoskop — ne razumijem ih ali vjerujem.",
+  "Rekli su mi da botovi ne mogu pobijediti u remi. Drže okladu?",
+  "Statistički gledano, netko mora izgubiti. Nadam se da nisam ja.",
+  "Upravo sam izračunao 14 mogućih poteza. Svi su loši.",
+  "Imate li vi nešto? Jer ja nemam ništa.",
+  "Šansa da dobijem ovaj krug: 50%. Ili 12%. Nisam siguran.",
+  "Joker je moj prijatelj. Nažalost, rijetko dolazi u posjete.",
+  "Ne bih rekao da gubim. Rekao bih da gradim suspense.",
+  "Imam strategiju. Tajna je.",
+  "Tko je bacio tu kartu?! Briljantno. (Bio sam to ja.)",
+  "Opustite se, igra je duga. Ja sam strpljiv — nemam izbora.",
+];
+
+// ── BOT CHAT TIMERI ───────────────────────────────────────────────
+function startBotChat(room) {
+  stopBotChat(room); // osiguraj da nema duplikata
+
+  room.botChatInterval = setInterval(() => {
+    if (!rooms[room.id] || !["draw","play"].includes(room.phase)) return;
+    const bots = room.players.filter(p => p.isBot && !p.eliminated);
+    if (bots.length === 0) return;
+    const bot = bots[Math.floor(Math.random() * bots.length)];
+    const line = BOT_CHAT_LINES[Math.floor(Math.random() * BOT_CHAT_LINES.length)];
+    io.to(room.id).emit("chat", { name: bot.name, text: line, system: false });
+  }, 3 * 60 * 1000 + Math.random() * 30000); // 3–3.5 minuta (malo varijacije)
+}
+
+function stopBotChat(room) {
+  if (room.botChatInterval) {
+    clearInterval(room.botChatInterval);
+    room.botChatInterval = null;
+  }
+}
+
 app.use(express.static("public"));
 
 // ════════════════════════════════════════════════════════════════
@@ -242,6 +292,7 @@ const UNOPENED_PENALTY = 100; // kazna za neotvaranje
 
 function endRound(room, winner) {
   if (room.botTimeout) { clearTimeout(room.botTimeout); room.botTimeout = null; }
+  stopBotChat(room);
 
   room.players.forEach(p => {
     if (p.eliminated) return;
@@ -690,6 +741,9 @@ io.on("connection", socket => {
     broadcastState(room);
     room.players.forEach(p => sendHand(room, p));
     io.to(roomId).emit("gameStarted");
+
+    // Pokretanje bot chat timera ako ima botova
+    if (room.players.some(p => p.isBot)) startBotChat(room);
   });
 
   // ── POSTAVI BODOVNI PRAG ─────────────────────────────────────
@@ -956,6 +1010,7 @@ io.on("connection", socket => {
     io.to(roomId).emit("chat", { system: true, text: `${p.name} se odspojio.` });
 
     if (room.players.every(pl => !pl.connected && !pl.isBot)) {
+      stopBotChat(room);
       setTimeout(() => {
         if (rooms[roomId] && room.players.every(pl => !pl.connected && !pl.isBot))
           delete rooms[roomId];
@@ -998,8 +1053,9 @@ io.on("connection", socket => {
     socket.data.roomId = null;
     localStorage && delete socket.data.roomId;
 
-    // Obriši sobu ako je prazna
+    // Obriši sobu ako je prazna (bez ljudskih igrača)
     if (room.players.filter(pl => !pl.isBot).length === 0) {
+      stopBotChat(room);
       delete rooms[roomId];
       return;
     }
