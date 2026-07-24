@@ -13,16 +13,43 @@
 <!-- ══════════════════════════════════════════════════════════ -->
 <!--  LOBBY EKRAN                                              -->
 <!-- ══════════════════════════════════════════════════════════ -->
-<div id="screen-lobby">
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  LOADING SCREEN                                            -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="screen-loading">
+  <div class="loading-suits">
+    <span class="ls ls-1">♠</span>
+    <span class="ls ls-2">♥</span>
+    <span class="ls ls-3">♣</span>
+    <span class="ls ls-4">♦</span>
+  </div>
+  <div class="loading-title">Remi 51</div>
+  <div class="loading-bar-wrap"><div class="loading-bar"></div></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  LOBBY EKRAN                                              -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="screen-lobby" style="display:none">
+  <!-- Plutajuće karte u pozadini -->
+  <div class="lobby-bg-cards" aria-hidden="true">
+    <span class="bg-card bc-1">♠</span>
+    <span class="bg-card bc-2">♥</span>
+    <span class="bg-card bc-3">♣</span>
+    <span class="bg-card bc-4">♦</span>
+    <span class="bg-card bc-5">♠</span>
+    <span class="bg-card bc-6">♥</span>
+  </div>
+
   <div class="lobby-card">
     <div class="lobby-logo">
-      <span class="logo-suit red">♥</span>
-      <span class="logo-title">Remi 51</span>
-      <span class="logo-suit black">♠</span>
+      <span class="logo-suit red anim-spin-in">♥</span>
+      <span class="logo-title anim-fade-up">Remi 51</span>
+      <span class="logo-suit black anim-spin-in" style="animation-delay:.1s">♠</span>
     </div>
-    <p class="lobby-subtitle">Balkanski remi za 2–4 igrača</p>
+    <p class="lobby-subtitle anim-fade-up" style="animation-delay:.15s">Balkanski remi za 2–4 igrača</p>
 
-    <div class="lobby-fields">
+    <div class="lobby-fields anim-fade-up" style="animation-delay:.25s">
       <input id="input-name" type="text" placeholder="Vaše ime" maxlength="20" autocomplete="off">
 
       <button id="btn-create" class="btn-gold">✦ Kreiraj novu sobu</button>
@@ -40,6 +67,13 @@
     </div>
 
     <div id="lobby-error" class="lobby-error" style="display:none"></div>
+
+    <!-- TikTok link -->
+    <a href="" target="_blank" rel="noopener" class="tiktok-link" title="Prati nas na TikToku">
+      <svg class="tiktok-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.17 8.17 0 0 0 4.78 1.52V6.75a4.85 4.85 0 0 1-1.01-.06z"/>
+      </svg>
+    </a>
   </div>
 </div>
 

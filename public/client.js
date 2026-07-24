@@ -260,6 +260,15 @@ socket.on("state", state => {
   gameState = state;
   renderAll();
 
+  // Timer
+  const cur = state.players[state.turn];
+  const isMe = cur?.id === socket.id;
+  if (state.turnDeadline && ["draw","play"].includes(state.phase) && !cur?.isBot) {
+    startTimerUI(state.turnDeadline);
+  } else {
+    stopTimerUI();
+  }
+
   // Bot dugme: samo host, samo lobby, max 3 igrača (4. slot slobodan)
   const canAddBot = isHost && state.phase === "lobby" && state.players.length < 4;
   btnAddBot.style.display = canAddBot ? "inline-flex" : "none";
@@ -279,7 +288,7 @@ socket.on("yourHand", hand => {
   updateButtons();
 });
 
-socket.on("roundOver", data => showRoundOver(data));
+socket.on("roundOver", data => { stopTimerUI(); showRoundOver(data); });
 socket.on("chat",  msg => addChat(msg));
 socket.on("err",   msg => showToast(msg, "error"));
 
@@ -304,11 +313,19 @@ btnLeave.onclick = () => {
 
 deckPile.onclick = () => {
   if (!isMyTurn() || getPhase() !== "draw") return;
+  // Animacija: karta leti iz kupa prema ruci (licem dolje — ne znamo što je)
+  flyCard(deckPile, handArea, '<div class="card-back-mini"></div>');
   socket.emit("draw", roomId);
 };
 
 discardPile.onclick = () => {
   if (!isMyTurn() || getPhase() !== "draw") return;
+  // Animacija: otpadna karta leti prema ruci
+  const top = gameState?.discardTop;
+  if (top) {
+    const html = `<div class="card ${top.suit === "♥" || top.suit === "♦" ? "red" : "black"}">${top.name}${top.suit}</div>`;
+    flyCard(discardPile, handArea, html);
+  }
   socket.emit("drawDiscard", roomId);
 };
 
@@ -380,6 +397,14 @@ btnCancelOpening.onclick = () => {
 btnDiscard.onclick = () => {
   if (selected.size !== 1) return;
   const [id] = selected;
+  // Animacija: karta leti iz ruke prema otpadu
+  const card = myHand.find(c => c.id === id);
+  const selEl = handArea.querySelector(".card-hand.selected");
+  if (card && selEl) {
+    const isRed = card.suit === "♥" || card.suit === "♦";
+    const html  = `<div class="card ${isRed ? "red" : "black"}" style="font-size:13px;padding:4px">${card.name}${card.suit}</div>`;
+    flyCard(selEl, discardPile, html);
+  }
   socket.emit("discard", roomId, id);
   selected.clear();
   renderHand();
@@ -394,6 +419,75 @@ function sendChat() {
   if (!text || !roomId) return;
   socket.emit("chat", { roomId, text });
   chatInput.value = "";
+}
+
+// ════════════════════════════════════════════════════════════════
+//  TURN TIMER
+// ════════════════════════════════════════════════════════════════
+let _timerRAF = null;
+let _timerEl  = null;
+
+function startTimerUI(deadline) {
+  if (_timerRAF) cancelAnimationFrame(_timerRAF);
+
+  // Stvori element ako ne postoji
+  if (!_timerEl) {
+    _timerEl = document.createElement("div");
+    _timerEl.id = "turn-timer";
+    document.getElementById("topbar").appendChild(_timerEl);
+  }
+
+  function tick() {
+    const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    const pct  = left / 60;
+    _timerEl.textContent = left + "s";
+    _timerEl.className   = "turn-timer"
+      + (pct <= 0.17 ? " timer-danger" : pct <= 0.33 ? " timer-warn" : "");
+    if (left > 0) _timerRAF = requestAnimationFrame(tick);
+    else          _timerEl.textContent = "";
+  }
+  tick();
+}
+
+function stopTimerUI() {
+  if (_timerRAF) { cancelAnimationFrame(_timerRAF); _timerRAF = null; }
+  if (_timerEl)  { _timerEl.textContent = ""; _timerEl.className = "turn-timer"; }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ANIMACIJA KARTE U LETU
+// ════════════════════════════════════════════════════════════════
+
+function flyCard(fromEl, toEl, cardContent, onDone) {
+  const from = fromEl.getBoundingClientRect();
+  const to   = toEl.getBoundingClientRect();
+
+  const ghost = document.createElement("div");
+  ghost.className = "card-fly";
+  ghost.innerHTML = cardContent;
+  ghost.style.cssText = `
+    left: ${from.left + from.width/2 - 27}px;
+    top:  ${from.top  + from.height/2 - 39}px;
+  `;
+  document.body.appendChild(ghost);
+
+  // Force reflow pa pokreni animaciju
+  void ghost.offsetWidth;
+  ghost.style.transition = "left .35s cubic-bezier(.4,0,.2,1), top .35s cubic-bezier(.4,0,.2,1), transform .35s, opacity .35s";
+  ghost.style.left    = (to.left + to.width/2  - 27) + "px";
+  ghost.style.top     = (to.top  + to.height/2 - 39) + "px";
+  ghost.style.transform = "scale(1.15)";
+  ghost.style.opacity = "0.85";
+
+  setTimeout(() => {
+    ghost.style.transform = "scale(0.7)";
+    ghost.style.opacity   = "0";
+  }, 280);
+
+  setTimeout(() => {
+    ghost.remove();
+    if (onDone) onDone();
+  }, 400);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1291,8 +1385,13 @@ function initTouchDrag(el, card) {
 // ════════════════════════════════════════════════════════════════
 
 function switchScreen(name) {
-  screenLobby.style.display = name === "lobby" ? "flex" : "none";
-  screenGame.style.display  = name === "game"  ? "flex" : "none";
+  screenLobby.style.display = name === "lobby" ? "flex"  : "none";
+  screenGame.style.display  = name === "game"  ? "flex"  : "none";
+  // Resetiraj animacije lobby kartice pri povratku
+  if (name === "lobby") {
+    const card = screenLobby.querySelector(".lobby-card");
+    if (card) { card.style.animation = "none"; void card.offsetWidth; card.style.animation = ""; }
+  }
 }
 
 function isMyTurn() {
@@ -1320,6 +1419,21 @@ function escHtml(s) {
 // ════════════════════════════════════════════════════════════════
 
 window.addEventListener("load", () => {
+  // Loading screen → lobby
+  const loadingEl = document.getElementById("screen-loading");
+  const lobbyEl   = document.getElementById("screen-lobby");
+
+  setTimeout(() => {
+    // Fade out loading screen
+    loadingEl.style.transition = "opacity .5s ease";
+    loadingEl.style.opacity = "0";
+    setTimeout(() => {
+      loadingEl.style.display = "none";
+      lobbyEl.style.display = "flex";
+    }, 500);
+  }, 1500);
+
+  // Auto-reconnect
   const savedRoom = localStorage.getItem("remi_room");
   const savedName = localStorage.getItem("remi_name");
   if (savedRoom && savedName) {

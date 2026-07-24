@@ -203,10 +203,58 @@ function findSwappableJoker(meld, naturalCard) {
   return -1;
 }
 
-// Bodovi bez jokera (za provjeru 51 pri otvaranju)
-function naturalPoints(cards) {
-  return cards.filter(c => !isJoker(c)).reduce((s,c) => s + c.value, 0);
+// Bodovi melda — joker nosi vrijednost karte koju zamjenjuje
+function meldPoints(meld) {
+  const real = meld.filter(c => !isJoker(c));
+  if (real.length === 0) return 0;
+
+  const realSum    = real.reduce((s, c) => s + c.value, 0);
+  const jokerCount = meld.length - real.length;
+  if (jokerCount === 0) return realSum;
+
+  // SET (iste figure, različite boje) — joker vrijedi isto kao ostale karte
+  const names = new Set(real.map(c => c.name));
+  if (names.size === 1) return realSum + jokerCount * real[0].value;
+
+  // SKALA — joker popunjava poziciju u nizu
+  const hasAce     = real.some(c => c.name === "A");
+  const hasHighCard = real.some(c => c.name === "Q" || c.name === "K");
+  const aceHigh    = hasAce && hasHighCard;
+  const getIdx     = n => (n === "A" && aceHigh) ? 13 : ORDER.indexOf(n);
+  const getVal     = idx => {
+    if (idx === 13) return VALUES["A"];
+    return VALUES[ORDER[idx]] ?? 0;
+  };
+
+  const sorted = [...real].sort((a, b) => getIdx(a.name) - getIdx(b.name));
+
+  let jokerPts = 0;
+  let jokersLeft = jokerCount;
+
+  // 1) Popuni praznine između stvarnih karata
+  for (let i = 0; i < sorted.length - 1 && jokersLeft > 0; i++) {
+    const lo = getIdx(sorted[i].name);
+    const hi = getIdx(sorted[i + 1].name);
+    for (let g = lo + 1; g < hi && jokersLeft > 0; g++) {
+      jokerPts += getVal(g);
+      jokersLeft--;
+    }
+  }
+
+  // 2) Preostali jokeri produžuju niz prema gore
+  if (jokersLeft > 0) {
+    let ext = getIdx(sorted[sorted.length - 1].name) + 1;
+    while (jokersLeft > 0 && ext <= 13) {
+      jokerPts += getVal(ext++);
+      jokersLeft--;
+    }
+  }
+
+  return realSum + jokerPts;
 }
+
+// Ostavimo alias radi kompatibilnosti sa starim pozivima
+function naturalPoints(cards) { return meldPoints(cards); }
 
 // Ukupna vrijednost (za oduzimanje bodova)
 function handValue(cards) {
@@ -238,11 +286,14 @@ function makeBotPlayer(name) {
   };
 }
 
+const TURN_SECONDS = 60;
+
 function publicState(room) {
   return {
     id:                 room.id,
     phase:              room.phase,
     turn:               room.turn,
+    turnDeadline:       room.turnDeadline ?? null,
     discardTop:         room.discard.at(-1) ?? null,
     deckCount:          room.deck.length,
     table:              room.table.map(sortMeld),
@@ -261,6 +312,51 @@ function publicState(room) {
   };
 }
 
+function clearTurnTimer(room) {
+  if (room.turnTimer) { clearTimeout(room.turnTimer); room.turnTimer = null; }
+  room.turnDeadline = null;
+}
+
+function startTurnTimer(room) {
+  clearTurnTimer(room);
+  const current = room.players[room.turn];
+  if (!current || current.isBot) return; // boti imaju vlastiti timer
+  if (!["draw","play"].includes(room.phase)) return;
+
+  room.turnDeadline = Date.now() + TURN_SECONDS * 1000;
+  room.turnTimer = setTimeout(() => {
+    room.turnTimer = null;
+    if (!rooms[room.id]) return;
+    const p = room.players[room.turn];
+    if (!p || p.isBot) return;
+
+    // Automatska akcija ovisno o fazi
+    if (room.phase === "draw") {
+      // Povuci s kupa
+      if (room.deck.length === 0) {
+        room.deck = shuffle(room.discard.splice(0, room.discard.length - 1));
+      }
+      if (room.deck.length > 0) p.hand.push(room.deck.pop());
+      room.phase = "play";
+      sendHand(room, p);
+    }
+
+    if (room.phase === "play") {
+      // Baci nasumičnu kartu (ne jokera ako ima drugog izbora)
+      let toDiscard = p.hand.find(c => !isJoker(c)) ?? p.hand[0];
+      if (!toDiscard) { nextTurn(room); broadcastState(room); return; }
+      p.hand = p.hand.filter(c => c.id !== toDiscard.id);
+      room.discard.push(toDiscard);
+      sendHand(room, p);
+      io.to(room.id).emit("chat", { system: true, text: `⏱ ${p.name} preskočen (isteklo vrijeme).` });
+      if (p.hand.length === 0) { endRound(room, p); return; }
+      nextTurn(room);
+      broadcastState(room);
+      room.players.forEach(pl => sendHand(room, pl));
+    }
+  }, TURN_SECONDS * 1000);
+}
+
 function nextTurn(room) {
   const n = room.players.length;
   let next = (room.turn + 1) % n;
@@ -274,6 +370,7 @@ function nextTurn(room) {
 }
 
 function broadcastState(room) {
+  startTurnTimer(room);
   io.to(room.id).emit("state", publicState(room));
   scheduleBot(room); // ako je bot na redu, zakaži potez
 }
@@ -292,6 +389,7 @@ const UNOPENED_PENALTY = 100; // kazna za neotvaranje
 
 function endRound(room, winner) {
   if (room.botTimeout) { clearTimeout(room.botTimeout); room.botTimeout = null; }
+  clearTurnTimer(room);
   stopBotChat(room);
 
   room.players.forEach(p => {

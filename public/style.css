@@ -33,6 +33,77 @@ html, body {
 /* ────────────────────────────────────────────────────────────────
    LOBBY
    ──────────────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────────
+   LOADING SCREEN
+   ──────────────────────────────────────────────────────────────── */
+#screen-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background:
+    radial-gradient(ellipse at 30% 40%, rgba(26,107,58,0.7) 0%, transparent 60%),
+    radial-gradient(ellipse at 70% 60%, rgba(15,69,36,0.9) 0%, transparent 60%),
+    #0a2e16;
+}
+
+.loading-suits {
+  display: flex;
+  gap: 20px;
+  font-size: 40px;
+  line-height: 1;
+}
+.ls { display: inline-block; animation: ls-bounce 1s ease-in-out infinite; }
+.ls-1 { color: #222; animation-delay: 0s; }
+.ls-2 { color: #e03333; animation-delay: .15s; }
+.ls-3 { color: #222; animation-delay: .3s; }
+.ls-4 { color: #e03333; animation-delay: .45s; }
+
+@keyframes ls-bounce {
+  0%, 100% { transform: translateY(0) scale(1);   opacity: .5; }
+  50%       { transform: translateY(-14px) scale(1.15); opacity: 1; }
+}
+
+.loading-title {
+  font-family: 'Cinzel', serif;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 3px;
+  text-shadow: 0 2px 16px rgba(212,168,67,0.5);
+  animation: fade-in-slow 1s ease forwards;
+}
+
+.loading-bar-wrap {
+  width: 160px;
+  height: 3px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.loading-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold-light), var(--gold));
+  border-radius: 2px;
+  animation: loading-fill 1.4s ease-out forwards;
+}
+
+@keyframes loading-fill {
+  from { width: 0; }
+  to   { width: 100%; }
+}
+@keyframes fade-in-slow {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   LOBBY
+   ──────────────────────────────────────────────────────────────── */
 #screen-lobby {
   display: flex;
   align-items: center;
@@ -43,7 +114,54 @@ html, body {
     radial-gradient(ellipse at 80% 50%, rgba(15,69,36,0.8) 0%, transparent 60%),
     #0a2e16;
   padding: 20px;
+  position: relative;
+  overflow: hidden;
 }
+
+/* Plutajuće karte u pozadini */
+.lobby-bg-cards { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.bg-card {
+  position: absolute;
+  font-size: 72px;
+  opacity: 0.04;
+  animation: bg-float linear infinite;
+  user-select: none;
+}
+.bc-1 { color:#fff; left:5%;  top:-80px; font-size:90px;  animation-duration:18s; animation-delay:0s; }
+.bc-2 { color:#e03; left:20%; top:-80px; font-size:60px;  animation-duration:14s; animation-delay:-4s; }
+.bc-3 { color:#fff; left:55%; top:-80px; font-size:80px;  animation-duration:20s; animation-delay:-8s; }
+.bc-4 { color:#e03; left:72%; top:-80px; font-size:70px;  animation-duration:16s; animation-delay:-2s; }
+.bc-5 { color:#fff; left:85%; top:-80px; font-size:55px;  animation-duration:22s; animation-delay:-6s; }
+.bc-6 { color:#e03; left:38%; top:-80px; font-size:100px; animation-duration:25s; animation-delay:-12s; }
+
+@keyframes bg-float {
+  from { transform: translateY(0)   rotate(0deg); }
+  to   { transform: translateY(110vh) rotate(30deg); }
+}
+
+/* Animacije za elemente lobby kartice */
+@keyframes anim-fade-up {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes anim-spin-in {
+  from { opacity: 0; transform: scale(0.3) rotate(-180deg); }
+  to   { opacity: 1; transform: scale(1)   rotate(0deg); }
+}
+.anim-fade-up  { animation: anim-fade-up  .55s cubic-bezier(.22,1,.36,1) both; }
+.anim-spin-in  { animation: anim-spin-in  .5s  cubic-bezier(.34,1.56,.64,1) both; }
+
+/* TikTok */
+.tiktok-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 22px;
+  color: rgba(255,255,255,0.35);
+  transition: color .2s, transform .2s;
+}
+.tiktok-link:hover { color: rgba(255,255,255,0.85); transform: scale(1.15); }
+.tiktok-icon { width: 22px; height: 22px; }
 
 .lobby-card {
   background: rgba(12, 42, 22, 0.92);
@@ -54,6 +172,13 @@ html, body {
   max-width: 420px;
   box-shadow: var(--shadow), inset 0 1px 0 rgba(212,168,67,0.15);
   text-align: center;
+  position: relative;
+  z-index: 1;
+  animation: lobby-card-in .6s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes lobby-card-in {
+  from { opacity: 0; transform: translateY(32px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
 .lobby-logo {
@@ -276,6 +401,51 @@ button:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important
 .turn-label  { font-size: 14px; color: var(--text-muted); }
 .turn-mine   { color: #7fff7f !important; font-weight: 700; }
 .turn-other  { color: var(--text-muted); }
+
+/* ── TURN TIMER ── */
+.turn-timer {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.55);
+  min-width: 30px;
+  text-align: center;
+  transition: color .3s;
+}
+.turn-timer.timer-warn   { color: #f6d860; }
+.turn-timer.timer-danger { color: #f05050; animation: timer-blink .5s ease-in-out infinite; }
+@keyframes timer-blink {
+  0%,100% { opacity: 1; }
+  50%     { opacity: .4; }
+}
+
+/* ── ANIMACIJA KARTE U LETU ── */
+.card-fly {
+  position: fixed;
+  width: 54px;
+  height: 78px;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--card-bg);
+  border: 1px solid rgba(0,0,0,0.15);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+.card-fly .red   { color: #d62b2b; }
+.card-fly .black { color: #111; }
+
+/* Licem dolje (za kup) */
+.card-back-mini {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #1a3a6e 0%, #0d2347 60%, #162c5a 100%);
+  border-radius: 6px;
+}
 
 /* ── GAME BOARD (stolni raspored) ──────────────────────────── */
 #game-board {
