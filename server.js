@@ -3,7 +3,7 @@
  * Pravila:
  *  - 2–4 igrača, 2×52 karte + 2 jokera = 106 karata
  *  - Svaki igrač dobiva 14 karata
- *  - Inicijalni izlaz: min 51 bod u JEDNOM meldu (jokeri se NE računaju)
+ *  - Inicijalni izlaz: min 51 bod (jokeri nose vrijednost karte koju zamjenjuju)
  *  - Joker zamjena: ako imaš prirodnu kartu koja zamjenjuje jokera, možeš ga uzeti
  *  - Živa figura: ne možeš završiti igru bacanjem jokera
  *  - Pobijedi onaj tko ostane bez karata
@@ -294,6 +294,7 @@ function publicState(room) {
     phase:              room.phase,
     turn:               room.turn,
     turnDeadline:       room.turnDeadline ?? null,
+    turnSeconds:        TURN_SECONDS,
     discardTop:         room.discard.at(-1) ?? null,
     deckCount:          room.deck.length,
     table:              room.table.map(sortMeld),
@@ -1118,6 +1119,7 @@ io.on("connection", socket => {
 
     if (room.phase !== "lobby" && room.phase !== "ended") {
       if (room.players[room.turn]?.id === socket.id) {
+        clearTurnTimer(room);
         nextTurn(room);
         broadcastState(room);
       }
@@ -1146,10 +1148,10 @@ io.on("connection", socket => {
     io.to(roomId).emit("chat", { system: true, text: `${p.name} je napustio sobu.` });
 
     // Makni igrača iz sobe
+    const wasOnTurn = room.turn === idx;
     room.players.splice(idx, 1);
     socket.leave(roomId);
     socket.data.roomId = null;
-    localStorage && delete socket.data.roomId;
 
     // Obriši sobu ako je prazna (bez ljudskih igrača)
     if (room.players.filter(pl => !pl.isBot).length === 0) {
@@ -1167,12 +1169,17 @@ io.on("connection", socket => {
       }
     }
 
-    // Ako je igra u tijeku i bio je na redu — preskoči
+    // Popravi turn index nakon brisanja igrača
+    if (room.turn >= room.players.length) {
+      room.turn = room.turn % Math.max(room.players.length, 1);
+    }
+
+    // Ako je igra u tijeku
     if (room.phase !== "lobby" && room.phase !== "ended") {
-      // Popravi turn index ako je potrebno
-      if (room.turn >= room.players.length) room.turn = 0;
-      // Nađi sljedećeg aktivnog
-      nextTurn(room);
+      if (wasOnTurn) {
+        // Bio je na redu — preskoči na sljedećeg
+        nextTurn(room);
+      }
       broadcastState(room);
       room.players.forEach(pl => sendHand(room, pl));
     } else {

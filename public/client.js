@@ -262,9 +262,8 @@ socket.on("state", state => {
 
   // Timer
   const cur = state.players[state.turn];
-  const isMe = cur?.id === socket.id;
   if (state.turnDeadline && ["draw","play"].includes(state.phase) && !cur?.isBot) {
-    startTimerUI(state.turnDeadline);
+    startTimerUI(state.turnDeadline, state.turnSeconds ?? 60);
   } else {
     stopTimerUI();
   }
@@ -427,10 +426,9 @@ function sendChat() {
 let _timerRAF = null;
 let _timerEl  = null;
 
-function startTimerUI(deadline) {
+function startTimerUI(deadline, totalSec = 60) {
   if (_timerRAF) cancelAnimationFrame(_timerRAF);
 
-  // Stvori element ako ne postoji
   if (!_timerEl) {
     _timerEl = document.createElement("div");
     _timerEl.id = "turn-timer";
@@ -439,7 +437,7 @@ function startTimerUI(deadline) {
 
   function tick() {
     const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-    const pct  = left / 60;
+    const pct  = left / totalSec;
     _timerEl.textContent = left + "s";
     _timerEl.className   = "turn-timer"
       + (pct <= 0.17 ? " timer-danger" : pct <= 0.33 ? " timer-warn" : "");
@@ -862,7 +860,7 @@ function toggleSelect(id) {
 function updateSelInfo() {
   if (selected.size === 0) { selInfo.textContent = ""; return; }
   const cards = myHand.filter(c => selected.has(c.id));
-  const pts   = cards.filter(c => c.name !== "JOKER").reduce((s,c) => s+c.value, 0);
+  const pts   = meldPointsClient(cards);
   let info    = `${selected.size} karta (${pts} bod.)`;
   if (selected.size >= 3) info += isValidMeldClient(cards) ? " ✅" : " ❌";
   selInfo.textContent = info;
@@ -888,7 +886,7 @@ function renderOpeningStage() {
 
   openingMelds.forEach((ids, idx) => {
     const cards = ids.map(id => byId[id]).filter(Boolean);
-    const nat   = cards.filter(c => c.name !== "JOKER").reduce((s,c) => s + c.value, 0);
+    const nat   = meldPointsClient(cards);
     totalNat   += nat;
 
     const label = cards.map(c => `${c.name}${c.suit}`).join(" ");
@@ -1121,7 +1119,8 @@ function cardColorClass(c) {
 //  SORTIRANJE RUKE
 // ════════════════════════════════════════════════════════════════
 
-const ORDER      = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const ORDER  = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const VALUES = { A:11,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,J:10,Q:10,K:10,JOKER:25 };
 const SUIT_ORDER = { "♠":0, "♥":1, "♦":2, "♣":3, "🃏":4 };
 
 function sortHand(hand) {
@@ -1164,6 +1163,60 @@ function sortHandByCombos(hand) {
 // ════════════════════════════════════════════════════════════════
 //  VALIDACIJA NA KLIJENTU (UI feedback)
 // ════════════════════════════════════════════════════════════════
+
+/**
+ * Računa bodove melda — joker nosi vrijednost karte koju zamjenjuje.
+ * Odgovara server-side meldPoints().
+ */
+function meldPointsClient(cards) {
+  const real   = cards.filter(c => c.name !== "JOKER");
+  if (real.length === 0) return 0;
+
+  const realSum    = real.reduce((s, c) => s + c.value, 0);
+  const jokerCount = cards.length - real.length;
+  if (jokerCount === 0) return realSum;
+
+  // SET — joker vrijedi isto kao ostale karte u setu
+  const names = new Set(real.map(c => c.name));
+  if (names.size === 1) return realSum + jokerCount * real[0].value;
+
+  // SKALA — joker popunjava poziciju u nizu
+  const hasAce     = real.some(c => c.name === "A");
+  const hasHighCard = real.some(c => c.name === "Q" || c.name === "K");
+  const aceHigh    = hasAce && hasHighCard;
+  const getIdx     = n => (n === "A" && aceHigh) ? 13 : ORDER.indexOf(n);
+  const getVal     = idx => {
+    if (idx === 13) return VALUES["A"];
+    const name = ORDER[idx];
+    return name ? (VALUES[name] ?? 0) : 0;
+  };
+
+  const sorted = [...real].sort((a, b) => getIdx(a.name) - getIdx(b.name));
+
+  let jokerPts  = 0;
+  let jokersLeft = jokerCount;
+
+  // 1) Popuni praznine između stvarnih karata
+  for (let i = 0; i < sorted.length - 1 && jokersLeft > 0; i++) {
+    const lo = getIdx(sorted[i].name);
+    const hi = getIdx(sorted[i + 1].name);
+    for (let g = lo + 1; g < hi && jokersLeft > 0; g++) {
+      jokerPts += getVal(g);
+      jokersLeft--;
+    }
+  }
+
+  // 2) Preostali jokeri produžuju niz prema gore
+  if (jokersLeft > 0) {
+    let ext = getIdx(sorted[sorted.length - 1].name) + 1;
+    while (jokersLeft > 0 && ext <= 13) {
+      jokerPts += getVal(ext++);
+      jokersLeft--;
+    }
+  }
+
+  return realSum + jokerPts;
+}
 
 function isValidMeldClient(cards) {
   const jokers = cards.filter(c => c.name === "JOKER").length;
