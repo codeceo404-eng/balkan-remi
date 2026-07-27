@@ -231,7 +231,7 @@ socket.on("roomJoined", data => {
   localStorage.setItem("remi_room", roomId);
   localStorage.setItem("remi_name", myName);
   switchScreen("game");
-  lblRoom.textContent       = "🃏 SOBA: " + roomId;
+  lblRoom.textContent = "🃏 SOBA: " + roomId;
   btnStart.style.display    = isHost ? "inline-flex" : "none";
   btnNewRound.style.display = "none";
   btnAddBot.style.display   = "none"; // state event će prikazati ako treba
@@ -259,6 +259,15 @@ socket.on("gameStarted", () => {
 socket.on("state", state => {
   gameState = state;
   renderAll();
+
+  // Krug u topbaru
+  if (state.round > 0) {
+    const lapTag   = !state.firstLapDone ? " (slobodan otpad)" : "";
+    const roundInfo = `Runda ${state.round}${lapTag}`;
+    lblRoom.textContent = `🃏 ${roomId}  ·  ${roundInfo}`;
+  } else {
+    lblRoom.textContent = "🃏 SOBA: " + roomId;
+  }
 
   // Timer
   const cur = state.players[state.turn];

@@ -293,6 +293,8 @@ function publicState(room) {
     id:                 room.id,
     phase:              room.phase,
     turn:               room.turn,
+    round:              room.round,
+    firstLapDone:       room.firstLapDone ?? true,
     turnDeadline:       room.turnDeadline ?? null,
     turnSeconds:        TURN_SECONDS,
     discardTop:         room.discard.at(-1) ?? null,
@@ -368,6 +370,11 @@ function nextTurn(room) {
   room.turn             = next;
   room.phase            = "draw";
   room.mustOpenThisTurn = false;
+  // Prati je li prošao prvi krug (svaki igrač odigrao jednom)
+  if (!room.firstLapDone) {
+    room.lapTurnsLeft = (room.lapTurnsLeft ?? 1) - 1;
+    if (room.lapTurnsLeft <= 0) room.firstLapDone = true;
+  }
 }
 
 function broadcastState(room) {
@@ -490,15 +497,21 @@ function botDraw(room, bot) {
         .some(combo => combo.some(c => c.id === discardTop.id));
       const fitsTable = room.table.some(meld => canAppend(meld, discardTop));
       shouldTake = usefulInHand || fitsTable;
+    } else if (!room.firstLapDone) {
+      // 1. krug — uzmi ako karta poboljšava kombinatoriku u ruci
+      const usefulInHand = botFindCombos(testHand)
+        .some(combo => combo.some(c => c.id === discardTop.id));
+      shouldTake = usefulInHand;
+      // Nema mustOpenThisTurn u prvom krugu
     } else {
-      // Nije otvoren: uzmi SAMO ako može odmah otvoriti s tom kartom
+      // Nakon prvog kruga — uzmi SAMO ako može odmah otvoriti
       shouldTake = canPlayerOpenWith(testHand);
     }
 
     if (shouldTake) {
       bot.hand.push(room.discard.pop());
       tookDiscard = true;
-      if (!bot.opened) room.mustOpenThisTurn = true;
+      if (!bot.opened && room.firstLapDone) room.mustOpenThisTurn = true;
     }
   }
 
@@ -821,9 +834,11 @@ io.on("connection", socket => {
 
     // Red počinje na sljedećem aktivnom igraču u rotaciji
     const startPlayer = active[room.round % active.length];
-    room.turn  = room.players.indexOf(startPlayer);
-    room.phase = "draw";
+    room.turn          = room.players.indexOf(startPlayer);
+    room.phase         = "draw";
     room.round++;
+    room.firstLapDone  = false;
+    room.lapTurnsLeft  = active.length;
 
     room.players.forEach(p => {
       p.hand       = [];
@@ -901,7 +916,8 @@ io.on("connection", socket => {
   });
 
   // ── VUCI S OTPADA ────────────────────────────────────────────
-  // Pravilo: ako nisi otvoren, moraš se otvoriti ovaj red
+  // Pravilo: ako nisi otvoren, možeš slobodno uzeti u 1. krugu;
+  //          od 2. kruga nadalje moraš se moći i moraš se otvoriti taj red.
   socket.on("drawDiscard", roomId => {
     const room = rooms[roomId];
     if (!room) return;
@@ -913,14 +929,18 @@ io.on("connection", socket => {
 
     const card = room.discard.at(-1);
 
-    // Ako još nije otvoren — provjeri može li se otvoriti s tom kartom
     if (!p.opened) {
-      const testHand = [...p.hand, card];
-      if (!canPlayerOpenWith(testHand)) {
-        socket.emit("err", "Ne možeš uzeti s otpada — ne možeš se otvoriti s tom kartom!");
-        return;
+      if (!room.firstLapDone) {
+        // 1. krug (svaki igrač još nije odigrao jednom) — slobodno uzimanje
+      } else {
+        // Nakon prvog kruga — moraš se moći otvoriti s tom kartom
+        const testHand = [...p.hand, card];
+        if (!canPlayerOpenWith(testHand)) {
+          socket.emit("err", "Ne možeš uzeti s otpada — ne možeš se otvoriti s tom kartom!");
+          return;
+        }
+        room.mustOpenThisTurn = true;
       }
-      room.mustOpenThisTurn = true;
     }
 
     p.hand.push(room.discard.pop());
