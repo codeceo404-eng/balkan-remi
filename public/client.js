@@ -112,6 +112,15 @@ document.querySelector(".topbar-right").insertBefore(
 const inputScoreLimit = document.getElementById("input-score-limit");
 inputScoreLimit.onchange = () => socket.emit("setScoreLimit", roomId, inputScoreLimit.value);
 
+// ── Auto igra dugme ──────────────────────────────────────────────
+const btnAutoPlay = document.createElement("button");
+btnAutoPlay.id          = "btn-auto-play";
+btnAutoPlay.className   = "btn-action btn-gray";
+btnAutoPlay.title       = "Bot igra umjesto tebe (tvoje ime ostaje)";
+btnAutoPlay.textContent = "🤖 Auto igra";
+btnAutoPlay.onclick     = () => socket.emit("toggleAutoPlay", roomId);
+document.querySelector(".action-left").appendChild(btnAutoPlay);
+
 // Sortiranje — ciklički prelazi između: kombos → boja+rang
 let _sortMode = 0; // 0 = kombos, 1 = boja+rang
 
@@ -271,11 +280,18 @@ socket.on("state", state => {
 
   // Timer
   const cur = state.players[state.turn];
-  if (state.turnDeadline && ["draw","play"].includes(state.phase) && !cur?.isBot) {
+  if (state.turnDeadline && ["draw","play"].includes(state.phase) && !cur?.isBot && !cur?.autoPlay) {
     startTimerUI(state.turnDeadline, state.turnSeconds ?? 60);
   } else {
     stopTimerUI();
   }
+
+  // Auto igra gumb — prikaži samo za mene, u aktivnoj igri
+  const me = state.players.find(p => p.id === socket.id);
+  const inGame = ["draw","play"].includes(state.phase);
+  btnAutoPlay.style.display = (me && inGame) ? "inline-flex" : "none";
+  btnAutoPlay.classList.toggle("btn-auto-active", me?.autoPlay ?? false);
+  btnAutoPlay.textContent = me?.autoPlay ? "⏹ Zaustavi auto" : "🤖 Auto igra";
 
   // Bot dugme: samo host, samo lobby, max 3 igrača (4. slot slobodan)
   const canAddBot = isHost && state.phase === "lobby" && state.players.length < 4;
@@ -929,11 +945,12 @@ function renderOpeningStage() {
 
 // ── GUMBI ────────────────────────────────────────────────────────
 function updateButtons() {
-  const phase  = getPhase();
-  const myTurn = isMyTurn();
-  const opened = isOpened();
-  const play   = myTurn && phase === "play";
-  const staging = !opened && openingMelds.length > 0;
+  const phase    = getPhase();
+  const myTurn   = isMyTurn();
+  const opened   = isOpened();
+  const autoPlay = gameState?.players?.find(p => p.id === socket.id)?.autoPlay ?? false;
+  const play     = myTurn && phase === "play" && !autoPlay;
+  const staging  = !opened && openingMelds.length > 0 && !autoPlay;
 
   // "Dodaj meld" kad nije otvoren, "Položi" kad je otvoren
   const mustOpen = gameState?.mustOpenThisTurn && !opened;
@@ -957,7 +974,7 @@ function updateButtons() {
     if (!play) openingMelds = [];
   }
 
-  const drawPhase = myTurn && phase === "draw";
+  const drawPhase = myTurn && phase === "draw" && !autoPlay;
   deckPile.classList.toggle("clickable", drawPhase);
   discardPile.classList.toggle("clickable", drawPhase && !!gameState?.discardTop);
 }

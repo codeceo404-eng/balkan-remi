@@ -310,6 +310,7 @@ function publicState(room) {
       totalScore: p.totalScore,
       connected:  p.connected,
       isBot:      p.isBot,
+      autoPlay:   p.autoPlay ?? false,
       eliminated: p.eliminated || false,
     })),
   };
@@ -323,7 +324,7 @@ function clearTurnTimer(room) {
 function startTurnTimer(room) {
   clearTurnTimer(room);
   const current = room.players[room.turn];
-  if (!current || current.isBot) return; // boti imaju vlastiti timer
+  if (!current || current.isBot || current.autoPlay) return; // boti i auto-play imaju vlastiti timer
   if (!["draw","play"].includes(room.phase)) return;
 
   room.turnDeadline = Date.now() + TURN_SECONDS * 1000;
@@ -464,7 +465,7 @@ function endRound(room, winner) {
  */
 function scheduleBot(room) {
   const current = room.players[room.turn];
-  if (!current?.isBot) return;
+  if (!current?.isBot && !current?.autoPlay) return;
   if (!["draw","play"].includes(room.phase)) return;
 
   if (room.botTimeout) clearTimeout(room.botTimeout);
@@ -476,7 +477,7 @@ function scheduleBot(room) {
 
 function makeBotMove(room) {
   const bot = room.players[room.turn];
-  if (!bot?.isBot) return;
+  if (!bot?.isBot && !bot?.autoPlay) return;
   if (room.phase === "draw") botDraw(room, bot);
   else if (room.phase === "play") botPlay(room, bot);
 }
@@ -898,7 +899,7 @@ io.on("connection", socket => {
     if (!room) return;
     const p = room.players[room.turn];
     if (p.id !== socket.id)    { socket.emit("err","Nije tvoj red."); return; }
-    if (p.isBot)               return;
+    if (p.isBot || p.autoPlay) return;
     if (room.phase !== "draw") { socket.emit("err","Već si vukao."); return; }
 
     if (room.deck.length === 0) {
@@ -923,7 +924,7 @@ io.on("connection", socket => {
     if (!room) return;
     const p = room.players[room.turn];
     if (p.id !== socket.id)    { socket.emit("err","Nije tvoj red."); return; }
-    if (p.isBot)               return;
+    if (p.isBot || p.autoPlay) return;
     if (room.phase !== "draw") { socket.emit("err","Već si vukao."); return; }
     if (!room.discard.length)  { socket.emit("err","Otpad je prazan."); return; }
 
@@ -956,7 +957,7 @@ io.on("connection", socket => {
     if (!room) return;
     const p = room.players[room.turn];
     if (p.id !== socket.id)    { socket.emit("err","Nije tvoj red."); return; }
-    if (p.isBot)               return;
+    if (p.isBot || p.autoPlay) return;
     if (room.phase !== "play") { socket.emit("err","Prvo vuci kartu."); return; }
     if (p.opened)              { socket.emit("err","Već si otvorio igru — koristi Položi."); return; }
     if (!Array.isArray(cardGroups) || cardGroups.length === 0)
@@ -1004,10 +1005,10 @@ io.on("connection", socket => {
     const room = rooms[roomId];
     if (!room) return;
     const p = room.players[room.turn];
-    if (p.id !== socket.id)     { socket.emit("err","Nije tvoj red."); return; }
-    if (p.isBot)                return;
-    if (room.phase !== "play")  { socket.emit("err","Prvo vuci kartu."); return; }
-    if (!p.opened)              { socket.emit("err","Za otvaranje koristi gumb 'Otvori igru!'."); return; }
+    if (p.id !== socket.id)        { socket.emit("err","Nije tvoj red."); return; }
+    if (p.isBot || p.autoPlay)     return;
+    if (room.phase !== "play")     { socket.emit("err","Prvo vuci kartu."); return; }
+    if (!p.opened)                 { socket.emit("err","Za otvaranje koristi gumb 'Otvori igru!'."); return; }
     if (!cardIds || cardIds.length < 3) { socket.emit("err","Min. 3 karte."); return; }
 
     const cards = resolveCards(p.hand, cardIds);
@@ -1077,7 +1078,7 @@ io.on("connection", socket => {
     if (!room) return;
     const p = room.players[room.turn];
     if (p.id !== socket.id)    { socket.emit("err","Nije tvoj red."); return; }
-    if (p.isBot)               return;
+    if (p.isBot || p.autoPlay) return;
     if (room.phase !== "play") { socket.emit("err","Prvo vuci kartu."); return; }
 
     const card = p.hand.find(c => c.id === cardId);
@@ -1154,6 +1155,22 @@ io.on("connection", socket => {
     }
 
     broadcastState(room);
+  });
+
+  // ── AUTO IGRA ───────────────────────────────────────────────
+  socket.on("toggleAutoPlay", roomId => {
+    const room = rooms[roomId];
+    if (!room) return;
+    const p = room.players.find(pl => pl.id === socket.id);
+    if (!p || p.isBot) return;
+    p.autoPlay = !p.autoPlay;
+    broadcastState(room);
+    room.players.forEach(pl => sendHand(room, pl));
+    // Ako je trenutno na redu — odmah zakaži bot potez
+    if (p.autoPlay && room.players[room.turn]?.id === socket.id) {
+      clearTurnTimer(room);
+      scheduleBot(room);
+    }
   });
 
   // ── LEAVE ROOM ──────────────────────────────────────────────
