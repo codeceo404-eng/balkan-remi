@@ -212,6 +212,45 @@ function findSwappableJoker(meld, naturalCard) {
   return -1;
 }
 
+// Za skale: zamijeni jokera SAMO ako karta točno popunjava jokerovu poziciju u nizu.
+// Sprječava situaciju gdje se joker zamijeni kartom koja bi zapravo trebala produžiti niz.
+function findSwappableJokerRun(meld, card) {
+  const real = meld.filter(c => !isJoker(c));
+  if (real.length === 0) return findSwappableJoker(meld, card);
+
+  const hasAce      = real.some(c => c.name === "A");
+  const hasHighCard  = real.some(c => c.name === "Q" || c.name === "K");
+  const aceHigh      = hasAce && hasHighCard;
+  const getIdx       = n => (n === "A" && aceHigh) ? 13 : ORDER.indexOf(n);
+
+  const cardIdx = getIdx(card.name);
+  if (cardIdx === -1) return -1;
+
+  // Karta već postoji u nizu → ne može duplikat
+  if (real.some(c => getIdx(c.name) === cardIdx)) return -1;
+
+  const sortedReal  = [...real].sort((a, b) => getIdx(a.name) - getIdx(b.name));
+  const maxIdx      = getIdx(sortedReal[sortedReal.length - 1].name);
+  const jokersTotal = meld.filter(c => isJoker(c)).length;
+
+  // Izračunaj koje ORDER indekse jokeri predstavljaju (praznine + kraj)
+  const jokerRepIndices = [];
+  for (let i = 0; i < sortedReal.length - 1; i++) {
+    const a = getIdx(sortedReal[i].name);
+    const b = getIdx(sortedReal[i + 1].name);
+    for (let g = a + 1; g < b; g++) jokerRepIndices.push(g);
+  }
+  const placed = jokerRepIndices.length;
+  for (let j = placed; j < jokersTotal; j++) {
+    jokerRepIndices.push(maxIdx + (j - placed + 1));
+  }
+
+  // Dozvoli zamjenu samo ako karta točno popunjava jednu od jokerovih pozicija
+  if (!jokerRepIndices.includes(cardIdx)) return -1;
+
+  return findSwappableJoker(meld, card);
+}
+
 // Bodovi melda — joker nosi vrijednost karte koju zamjenjuje
 function meldPoints(meld) {
   const real = meld.filter(c => !isJoker(c));
@@ -632,7 +671,7 @@ function botPlay(room, bot) {
               }
             }
           } else {
-            const jokerIdx = findSwappableJoker(meld, card);
+            const jokerIdx = findSwappableJokerRun(meld, card);
             if (jokerIdx !== -1) {
               const jokerCard = meld[jokerIdx];
               const handWithoutCard = bot.hand.filter(c => c.id !== card.id);
@@ -1104,10 +1143,7 @@ io.on("connection", socket => {
     // Redoslijed ovisi o tipu melda:
     //   SET   — dodaj prvo (joker zamjena tek kad set dosegne maks. 4 karte i nema mjesta)
     //   SKALA — zamijeni jokera prvo ako karta popunjava prazninu; inače dodaj na kraj
-    if (isJoker(card)) {
-      socket.emit("err","Ta karta ne može ići u tu kombinaciju.");
-      return;
-    }
+    // Napomena: joker iz ruke se može dodati na meld (canAppend/isValidMeld to provjerava)
     const meldReal = meld.filter(c => !isJoker(c));
     const meldType = meldReal.length > 0 && meldReal.every(c => c.name === meldReal[0].name)
       ? "set" : "run";
@@ -1115,12 +1151,12 @@ io.on("connection", socket => {
     let handled = false;
     let wasJokerSwap = false;
     if (meldType === "set") {
-      // SET: prioritet dodavanju, joker zamjena samo kad nema mjesta (set pun)
+      // SET: prioritet dodavanju, joker zamjena samo kad nema mjesta (set pun) i karta je prirodna
       if (canAppend(meld, card)) {
         removeFromHand(p, [cardId]);
         meld.push(card);
         handled = true;
-      } else {
+      } else if (!isJoker(card)) {
         const jokerIdx = findSwappableJoker(meld, card);
         if (jokerIdx !== -1) {
           const joker    = meld[jokerIdx];
@@ -1131,8 +1167,8 @@ io.on("connection", socket => {
         }
       }
     } else {
-      // SKALA: prioritet joker zamjeni (popuni prazninu), inače dodaj na kraj niza
-      const jokerIdx = findSwappableJoker(meld, card);
+      // SKALA: joker zamjena samo ako karta točno popunjava jokerovu poziciju
+      const jokerIdx = findSwappableJokerRun(meld, card);
       if (jokerIdx !== -1) {
         const joker    = meld[jokerIdx];
         meld[jokerIdx] = card;
