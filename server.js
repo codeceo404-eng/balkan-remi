@@ -18,6 +18,12 @@ const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, { pingTimeout: 60000 });
 
+// ── LOGGING ───────────────────────────────────────────────────────
+function log(icon, ...args) {
+  const t = new Date().toTimeString().slice(0, 8);
+  console.log(`[${t}] ${icon}`, ...args);
+}
+
 // ── BOT CHAT PORUKE ───────────────────────────────────────────────
 const BOT_CHAT_LINES = [
   "Imam plan. Nadam se da i karte imaju isti plan.",
@@ -363,7 +369,7 @@ function startTurnTimer(room) {
       room.discard.push(toDiscard);
       sendHand(room, p);
       io.to(room.id).emit("chat", { system: true, text: `⏱ ${p.name} preskočen (isteklo vrijeme).` });
-      if (p.hand.length === 0) { endRound(room, p); return; }
+      if (p.hand.length === 0) { endRound(room, p, room.handOpenedThisTurn); return; }
       nextTurn(room);
       broadcastState(room);
       room.players.forEach(pl => sendHand(room, pl));
@@ -378,9 +384,10 @@ function nextTurn(room) {
     if (!room.players[next].eliminated) break;
     next = (next + 1) % n;
   }
-  room.turn             = next;
-  room.phase            = "draw";
-  room.mustOpenThisTurn = false;
+  room.turn                = next;
+  room.phase               = "draw";
+  room.mustOpenThisTurn    = false;
+  room.handOpenedThisTurn  = false;
   // Prati je li prošao prvi krug (svaki igrač odigrao jednom)
   if (!room.firstLapDone) {
     room.lapTurnsLeft = (room.lapTurnsLeft ?? 1) - 1;
@@ -406,7 +413,7 @@ function sendHand(room, player) {
 const WINNER_BONUS    = -40;  // pobjednik dobiva −40
 const UNOPENED_PENALTY = 100; // kazna za neotvaranje
 
-function endRound(room, winner) {
+function endRound(room, winner, isHand = false) {
   if (room.botTimeout) { clearTimeout(room.botTimeout); room.botTimeout = null; }
   clearTurnTimer(room);
   stopBotChat(room);
@@ -418,6 +425,7 @@ function endRound(room, winner) {
     } else {
       p.roundScore = handValue(p.hand);
       if (!p.opened) p.roundScore += UNOPENED_PENALTY;
+      if (isHand) p.roundScore *= 2; // Hand: dupli bodovi za gubitnike
     }
     p.totalScore += p.roundScore;
   });
@@ -433,8 +441,11 @@ function endRound(room, winner) {
 
   room.phase = "ended";
 
+  log("🏆 END ROUND", `soba ${room.id} | pobjednik: ${winner.name}${isHand ? " (HAND!)" : ""} | runda ${room.round}`);
+
   io.to(room.id).emit("roundOver", {
     winnerName:      winner.name,
+    isHand:          isHand,
     eliminated:      newlyEliminated,
     scoreLimit:      room.scoreLimit,
     scores: room.players.map(p => ({
@@ -732,7 +743,7 @@ function botDiscard(room, bot) {
   removeFromHand(bot, [toDiscard.id]);
   room.discard.push(toDiscard);
 
-  if (bot.hand.length === 0) { endRound(room, bot); return; }
+  if (bot.hand.length === 0) { endRound(room, bot, room.handOpenedThisTurn); return; }
 
   nextTurn(room);
   broadcastState(room);
@@ -781,6 +792,7 @@ function cardCombinations(arr, size) {
 // ════════════════════════════════════════════════════════════════
 
 io.on("connection", socket => {
+  log("🔌 CONNECT  ", socket.id);
 
   // ── KREIRANJE SOBE ───────────────────────────────────────────
   socket.on("createRoom", name => {
@@ -802,6 +814,7 @@ io.on("connection", socket => {
     socket.data.roomId = id;
     socket.emit("roomJoined", { roomId: id, isHost: true });
     io.to(id).emit("state", publicState(rooms[id]));
+    log("🏠 CREATE   ", `${name} → soba ${id}`);
   });
 
   // ── PRIDRUŽIVANJE ────────────────────────────────────────────
@@ -819,6 +832,7 @@ io.on("connection", socket => {
     socket.emit("roomJoined", { roomId, isHost: false });
     io.to(roomId).emit("state", publicState(room));
     io.to(roomId).emit("chat", { system: true, text: `${name} se pridružio.` });
+    log("👋 JOIN     ", `${name} → soba ${roomId} (${room.players.length} igrača)`);
   });
 
   // ── DODAJ BOTA ───────────────────────────────────────────────
@@ -868,11 +882,12 @@ io.on("connection", socket => {
 
     // Red počinje na sljedećem aktivnom igraču u rotaciji
     const startPlayer = active[room.round % active.length];
-    room.turn          = room.players.indexOf(startPlayer);
-    room.phase         = "draw";
+    room.turn                = room.players.indexOf(startPlayer);
+    room.phase               = "draw";
     room.round++;
-    room.firstLapDone  = false;
-    room.lapTurnsLeft  = active.length;
+    room.firstLapDone        = false;
+    room.lapTurnsLeft        = active.length;
+    room.handOpenedThisTurn  = false;
 
     room.players.forEach(p => {
       p.hand       = [];
@@ -889,6 +904,9 @@ io.on("connection", socket => {
     broadcastState(room);
     room.players.forEach(p => sendHand(room, p));
     io.to(roomId).emit("gameStarted");
+
+    const names = active.map(p => p.name).join(", ");
+    log("🎮 START    ", `soba ${roomId} | runda ${room.round} | igrači: ${names}`);
 
     // Pokretanje bot chat timera ako ima botova
     if (room.players.some(p => p.isBot)) startBotChat(room);
@@ -1022,6 +1040,8 @@ io.on("connection", socket => {
     }
 
     // Sve OK — polozi meldove
+    // Ako se otvara prvi put ovaj potez — potencijalni Hand
+    if (!p.opened) room.handOpenedThisTurn = true;
     p.opened = true;
     for (const { ids, cards } of resolved) {
       removeFromHand(p, ids);
@@ -1165,7 +1185,11 @@ io.on("connection", socket => {
     removeFromHand(p, [cardId]);
     room.discard.push(card);
 
-    if (p.hand.length === 0) { endRound(room, p); return; }
+    if (p.hand.length === 0) {
+      const isHand = room.handOpenedThisTurn;
+      endRound(room, p, isHand);
+      return;
+    }
 
     nextTurn(room);
     broadcastState(room);
@@ -1193,6 +1217,7 @@ io.on("connection", socket => {
     if (!p) return;
 
     p.connected = false;
+    log("❌ DISCONNECT", `${p.name} (soba ${roomId})`);
     io.to(roomId).emit("chat", { system: true, text: `${p.name} se odspojio.` });
 
     if (room.players.every(pl => !pl.connected && !pl.isBot)) {

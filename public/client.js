@@ -987,8 +987,10 @@ function updateButtons() {
 //  ROUND OVER OVERLAY
 // ════════════════════════════════════════════════════════════════
 
-function showRoundOver({ winnerName, scores, eliminated = [], scoreLimit = 2500 }) {
-  overlayTitle.textContent = `🏆 ${escHtml(winnerName)} pobijedio rundu!`;
+function showRoundOver({ winnerName, scores, eliminated = [], scoreLimit = 2500, isHand = false }) {
+  overlayTitle.textContent = isHand
+    ? `🃏 HAND! ${escHtml(winnerName)} — dupli bodovi za sve!`
+    : `🏆 ${escHtml(winnerName)} pobijedio rundu!`;
 
   const sorted = [...scores].sort((a, b) => a.totalScore - b.totalScore);
 
@@ -998,10 +1000,11 @@ function showRoundOver({ winnerName, scores, eliminated = [], scoreLimit = 2500 
     let label = `+${s.roundScore}`;
     const parts = [];
     if (!s.opened && !s.isWinner) {
-      const cardPts = s.roundScore - 100;
-      parts.push(`karte: +${cardPts}`);
+      const base = isHand ? (s.roundScore / 2 - 100) : (s.roundScore - 100);
+      parts.push(`karte: +${base}`);
       parts.push(`nije otvorio: +100`);
     }
+    if (isHand && !s.isWinner) parts.push(`hand: ×2`);
     return parts.length ? `${label} <span class="score-detail">(${parts.join(", ")})</span>` : label;
   }
 
