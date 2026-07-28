@@ -1076,6 +1076,131 @@ button:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important
   to   { transform: scale(1);   opacity: 1; }
 }
 
+/* ════════════════════════════════════════════════════════════════
+   QUICK CHAT
+   ════════════════════════════════════════════════════════════════ */
+#qc-btn {
+  position: fixed;
+  bottom: 90px;
+  right: 14px;
+  z-index: 800;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(30,30,40,0.82);
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+  backdrop-filter: blur(6px);
+  transition: transform .15s, background .15s;
+}
+#qc-btn:hover { background: rgba(60,60,90,0.9); transform: scale(1.08); }
+
+#qc-menu {
+  position: fixed;
+  bottom: 144px;
+  right: 10px;
+  z-index: 801;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  animation: qc-menu-in .18s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes qc-menu-in {
+  from { opacity: 0; transform: scale(0.85) translateY(10px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+.qc-item {
+  background: rgba(20,20,32,0.88);
+  border: 1.5px solid rgba(255,255,255,0.18);
+  color: #f0f0f8;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  transition: background .12s, transform .1s;
+  user-select: none;
+}
+.qc-item:hover { background: rgba(80,80,140,0.9); transform: scale(1.04); }
+.qc-item:active { transform: scale(0.97); }
+
+/* Bubble kontejner */
+#qc-bubbles {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 750;
+}
+
+/* Oblačić */
+.qc-bubble {
+  position: fixed;
+  background: #fff;
+  color: #1a1a2e;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 18px;
+  box-shadow: 0 3px 14px rgba(0,0,0,0.35);
+  white-space: nowrap;
+  animation: qc-bubble-in .28s cubic-bezier(.34,1.56,.64,1);
+  transition: opacity .35s, transform .35s;
+  max-width: 200px;
+}
+.qc-bubble-out { opacity: 0; transform: scale(0.8) translateY(-6px); }
+
+/* Rep oblačića — gore (za mene, koji je dole) */
+.qc-bubble-up::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 16px;
+  border: 5px solid transparent;
+  border-top-color: #fff;
+}
+/* Rep oblačića — dole (za gornje igrače) */
+.qc-bubble-down::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 16px;
+  border: 5px solid transparent;
+  border-bottom-color: #fff;
+}
+/* Rep oblačića — lijevo (za desnog igrača, bubble je levo od panela) */
+.qc-bubble-left::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -8px;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-left-color: #fff;
+}
+/* Rep oblačića — desno (za lijevog igrača, bubble je desno od panela) */
+.qc-bubble-right::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -8px;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-right-color: #fff;
+}
+
+@keyframes qc-bubble-in {
+  from { opacity: 0; transform: scale(0.6); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
 /* ── Tijelo chata ── */
 #chat-body { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-width: 0; }
 

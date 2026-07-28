@@ -293,6 +293,9 @@ socket.on("state", state => {
   btnAutoPlay.classList.toggle("btn-auto-active", me?.autoPlay ?? false);
   btnAutoPlay.textContent = me?.autoPlay ? "⏹ Zaustavi auto" : "🤖 Auto igra";
 
+  // Quick chat gumb
+  updateQcBtn(state.phase);
+
   // Bot dugme: samo host, samo lobby, max 3 igrača (4. slot slobodan)
   const canAddBot = isHost && state.phase === "lobby" && state.players.length < 4;
   btnAddBot.style.display = canAddBot ? "inline-flex" : "none";
@@ -315,6 +318,7 @@ socket.on("yourHand", hand => {
 socket.on("roundOver", data => { stopTimerUI(); showRoundOver(data); });
 socket.on("chat",  msg => addChat(msg));
 socket.on("err",   msg => showToast(msg, "error"));
+socket.on("quickChat", ({ playerId, msg }) => showQuickBubble(playerId, msg));
 
 // ════════════════════════════════════════════════════════════════
 //  KONTROLE IGRE
@@ -1491,6 +1495,119 @@ function escHtml(s) {
     .replace(/</g,"&lt;")
     .replace(/>/g,"&gt;")
     .replace(/"/g,"&quot;");
+}
+
+// ════════════════════════════════════════════════════════════════
+//  QUICK CHAT
+// ════════════════════════════════════════════════════════════════
+
+const qcBtn    = document.getElementById("qc-btn");
+const qcMenu   = document.getElementById("qc-menu");
+const qcBubbles = document.getElementById("qc-bubbles");
+
+let qcMenuOpen = false;
+const _qcTimers = {}; // playerId → timeout
+
+qcBtn.onclick = (e) => {
+  e.stopPropagation();
+  qcMenuOpen = !qcMenuOpen;
+  qcMenu.style.display = qcMenuOpen ? "grid" : "none";
+};
+
+document.querySelectorAll(".qc-item").forEach(el => {
+  el.onclick = () => {
+    const idx = parseInt(el.dataset.idx);
+    socket.emit("quickChat", roomId, idx);
+    qcMenuOpen = false;
+    qcMenu.style.display = "none";
+  };
+});
+
+document.addEventListener("click", () => {
+  if (qcMenuOpen) {
+    qcMenuOpen = false;
+    qcMenu.style.display = "none";
+  }
+});
+
+// Prikaži/sakrij gumb ovisno o fazi igre (updateButtons ga ne treba dirati)
+function updateQcBtn(phase) {
+  qcBtn.style.display = ["draw","play","ended"].includes(phase) ? "flex" : "none";
+}
+
+function getPlayerAnchorEl(playerId) {
+  if (!gameState) return null;
+  const players = gameState.players;
+  const pIdx    = players.findIndex(p => p.id === playerId);
+  if (pIdx === -1) return null;
+  const isMobile = window.innerWidth <= 640;
+
+  if (playerId === socket.id) {
+    return document.getElementById("my-info-bar");
+  }
+  if (isMobile) {
+    // Pronađi chip tog igrača u opp-top
+    const chips = document.querySelectorAll(".opp-mobile-chip");
+    let chipIdx = 0;
+    for (let i = 0; i < players.length; i++) {
+      if (players[i].id === socket.id) continue;
+      if (players[i].id === playerId) return chips[chipIdx] ?? oppTop;
+      chipIdx++;
+    }
+    return oppTop;
+  }
+  const seat = seatFor(pIdx);
+  if (seat === "top")   return oppTop;
+  if (seat === "left")  return oppLeft;
+  if (seat === "right") return oppRight;
+  return null;
+}
+
+function showQuickBubble(playerId, msg) {
+  const anchor = getPlayerAnchorEl(playerId);
+  if (!anchor) return;
+
+  // Ukloni stari bubble tog igrača
+  const old = document.getElementById("qcb-" + playerId);
+  if (old) old.remove();
+  clearTimeout(_qcTimers[playerId]);
+
+  const rect   = anchor.getBoundingClientRect();
+  const isMe   = playerId === socket.id;
+  const isMobile = window.innerWidth <= 640;
+
+  const bubble = document.createElement("div");
+  bubble.id        = "qcb-" + playerId;
+  bubble.className = "qc-bubble";
+  bubble.textContent = msg;
+
+  // Pozicioniraj iznad ili ispod elementa
+  if (isMe) {
+    // Iznad moje info bar — bubbles se pojavljuje iznad
+    bubble.style.left   = (rect.left + 12) + "px";
+    bubble.style.bottom = (window.innerHeight - rect.top + 6) + "px";
+    bubble.classList.add("qc-bubble-up");
+  } else if (anchor === oppTop || isMobile) {
+    // Ispod gornjeg panela / mobilnih chipova
+    bubble.style.left = (rect.left + rect.width / 2 - 60) + "px";
+    bubble.style.top  = (rect.bottom + 6) + "px";
+    bubble.classList.add("qc-bubble-down");
+  } else if (anchor === oppLeft) {
+    bubble.style.left = (rect.right + 8) + "px";
+    bubble.style.top  = (rect.top + rect.height / 2 - 18) + "px";
+    bubble.classList.add("qc-bubble-right");
+  } else if (anchor === oppRight) {
+    bubble.style.right = (window.innerWidth - rect.left + 8) + "px";
+    bubble.style.top   = (rect.top + rect.height / 2 - 18) + "px";
+    bubble.classList.add("qc-bubble-left");
+  }
+
+  qcBubbles.appendChild(bubble);
+
+  _qcTimers[playerId] = setTimeout(() => {
+    bubble.classList.add("qc-bubble-out");
+    setTimeout(() => bubble.remove(), 350);
+  }, 2800);
 }
 
 // ════════════════════════════════════════════════════════════════

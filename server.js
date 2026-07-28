@@ -47,6 +47,16 @@ const BOT_CHAT_LINES = [
   "Opustite se, igra je duga. Ja sam strpljiv — nemam izbora.",
 ];
 
+// ── QUICK CHAT PORUKE ─────────────────────────────────────────────
+const QUICK_MESSAGES = [
+  "Dobra karta! 👍",
+  "Sretno! 🤝",
+  "Hm... 🤔",
+  "Joj joj 😬",
+  "Hvala! 😊",
+  "Otvaram! 🃏",
+];
+
 // ── BOT CHAT TIMERI ───────────────────────────────────────────────
 function startBotChat(room) {
   stopBotChat(room); // osiguraj da nema duplikata
@@ -590,28 +600,51 @@ function botPlay(room, bot) {
           const card = bot.hand[ci];
           if (isJoker(card)) continue;
 
-          // Zamjena jokera — samo ako ostaje min. 1 karta nakon toga
-          const jokerIdx = findSwappableJoker(meld, card);
-          if (jokerIdx !== -1) {
-            const jokerCard = meld[jokerIdx];
-            const handWithoutCard = bot.hand.filter(c => c.id !== card.id);
-            const jokerUseful = botFindCombos([...handWithoutCard, jokerCard]).length > 0;
-            // Nakon zamjene: uklanjamo naturalCard, dodajemo joker → veličina ostaje ista
-            if (jokerUseful) {
-              meld[jokerIdx] = card;
+          // Redoslijed isti kao za igrača: set=dodaj prvo, skala=zamijeni joker prvo
+          const botMeldReal = meld.filter(c => !isJoker(c));
+          const botMeldType = botMeldReal.length > 0 && botMeldReal.every(c => c.name === botMeldReal[0].name)
+            ? "set" : "run";
+
+          if (botMeldType === "set") {
+            if (canAppend(meld, card) && bot.hand.length > 1) {
+              meld.push(card);
               bot.hand.splice(ci, 1);
-              bot.hand.push(jokerCard);
               changed = true;
               break outer;
             }
-          }
-
-          // Direktno dodaj — samo ako ostaje min. 1 karta
-          if (canAppend(meld, card) && bot.hand.length > 1) {
-            meld.push(card);
-            bot.hand.splice(ci, 1);
-            changed = true;
-            break outer;
+            const jokerIdx = findSwappableJoker(meld, card);
+            if (jokerIdx !== -1) {
+              const jokerCard = meld[jokerIdx];
+              const handWithoutCard = bot.hand.filter(c => c.id !== card.id);
+              const jokerUseful = botFindCombos([...handWithoutCard, jokerCard]).length > 0;
+              if (jokerUseful && bot.hand.length > 1) {
+                meld[jokerIdx] = card;
+                bot.hand.splice(ci, 1);
+                bot.hand.push(jokerCard);
+                changed = true;
+                break outer;
+              }
+            }
+          } else {
+            const jokerIdx = findSwappableJoker(meld, card);
+            if (jokerIdx !== -1) {
+              const jokerCard = meld[jokerIdx];
+              const handWithoutCard = bot.hand.filter(c => c.id !== card.id);
+              const jokerUseful = botFindCombos([...handWithoutCard, jokerCard]).length > 0;
+              if (jokerUseful && bot.hand.length > 1) {
+                meld[jokerIdx] = card;
+                bot.hand.splice(ci, 1);
+                bot.hand.push(jokerCard);
+                changed = true;
+                break outer;
+              }
+            }
+            if (canAppend(meld, card) && bot.hand.length > 1) {
+              meld.push(card);
+              bot.hand.splice(ci, 1);
+              changed = true;
+              break outer;
+            }
           }
         }
       }
@@ -1052,17 +1085,50 @@ io.on("connection", socket => {
       return;
     }
 
-    // Auto-zamjena jokera: ako karta može zauzeti jokerovo mjesto, joker ide u ruku
-    const jokerIdx = !isJoker(card) ? findSwappableJoker(meld, card) : -1;
-    if (jokerIdx !== -1) {
-      const joker    = meld[jokerIdx];
-      meld[jokerIdx] = card;
-      removeFromHand(p, [cardId]);
-      p.hand.push(joker);
-    } else if (canAppend(meld, card)) {
-      removeFromHand(p, [cardId]);
-      meld.push(card);
+    // Redoslijed ovisi o tipu melda:
+    //   SET   — dodaj prvo (joker zamjena tek kad set dosegne maks. 4 karte i nema mjesta)
+    //   SKALA — zamijeni jokera prvo ako karta popunjava prazninu; inače dodaj na kraj
+    if (isJoker(card)) {
+      socket.emit("err","Ta karta ne može ići u tu kombinaciju.");
+      return;
+    }
+    const meldReal = meld.filter(c => !isJoker(c));
+    const meldType = meldReal.length > 0 && meldReal.every(c => c.name === meldReal[0].name)
+      ? "set" : "run";
+
+    let handled = false;
+    if (meldType === "set") {
+      // SET: prioritet dodavanju, joker zamjena samo kad nema mjesta (set pun)
+      if (canAppend(meld, card)) {
+        removeFromHand(p, [cardId]);
+        meld.push(card);
+        handled = true;
+      } else {
+        const jokerIdx = findSwappableJoker(meld, card);
+        if (jokerIdx !== -1) {
+          const joker    = meld[jokerIdx];
+          meld[jokerIdx] = card;
+          removeFromHand(p, [cardId]);
+          p.hand.push(joker);
+          handled = true;
+        }
+      }
     } else {
+      // SKALA: prioritet joker zamjeni (popuni prazninu), inače dodaj na kraj niza
+      const jokerIdx = findSwappableJoker(meld, card);
+      if (jokerIdx !== -1) {
+        const joker    = meld[jokerIdx];
+        meld[jokerIdx] = card;
+        removeFromHand(p, [cardId]);
+        p.hand.push(joker);
+        handled = true;
+      } else if (canAppend(meld, card)) {
+        removeFromHand(p, [cardId]);
+        meld.push(card);
+        handled = true;
+      }
+    }
+    if (!handled) {
       socket.emit("err","Ta karta ne može ići u tu kombinaciju.");
       return;
     }
@@ -1155,6 +1221,16 @@ io.on("connection", socket => {
     }
 
     broadcastState(room);
+  });
+
+  // ── QUICK CHAT ──────────────────────────────────────────────
+  socket.on("quickChat", (roomId, idx) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    const p = room.players.find(pl => pl.id === socket.id);
+    if (!p) return;
+    if (typeof idx !== "number" || idx < 0 || idx >= QUICK_MESSAGES.length) return;
+    io.to(roomId).emit("quickChat", { playerId: p.id, msg: QUICK_MESSAGES[idx] });
   });
 
   // ── AUTO IGRA ───────────────────────────────────────────────
