@@ -54,14 +54,7 @@ const BOT_CHAT_LINES = [
 ];
 
 // ── QUICK CHAT PORUKE ─────────────────────────────────────────────
-const QUICK_MESSAGES = [
-  "Dobra karta! 👍",
-  "Sretno! 🤝",
-  "Hm... 🤔",
-  "Joj joj 😬",
-  "Hvala! 😊",
-  "Otvaram! 🃏",
-];
+const QUICK_MESSAGES = ["👍", "😂", "🤔", "😬", "🔥", "❤️"];
 
 // ── BOT CHAT TIMERI ───────────────────────────────────────────────
 function startBotChat(room) {
@@ -326,8 +319,9 @@ function publicState(room) {
       totalScore: p.totalScore,
       connected:  p.connected,
       isBot:      p.isBot,
-      autoPlay:   p.autoPlay ?? false,
-      eliminated: p.eliminated || false,
+      autoPlay:        p.autoPlay ?? false,
+      lastRoundDelta:  p.lastRoundDelta ?? null,
+      eliminated:      p.eliminated || false,
     })),
   };
 }
@@ -427,6 +421,7 @@ function endRound(room, winner, isHand = false) {
       if (!p.opened) p.roundScore += UNOPENED_PENALTY;
       if (isHand) p.roundScore *= 2; // Hand: dupli bodovi za gubitnike
     }
+    p.lastRoundDelta = p.roundScore;
     p.totalScore += p.roundScore;
   });
 
@@ -939,6 +934,7 @@ io.on("connection", socket => {
     room.players.forEach(p => {
       p.hand = []; p.opened = false;
       p.roundScore = 0; p.totalScore = 0; p.eliminated = false;
+      p.lastRoundDelta = null;
     });
     broadcastState(room);
     room.players.forEach(p => sendHand(room, p));
@@ -1088,10 +1084,10 @@ io.on("connection", socket => {
     const room = rooms[roomId];
     if (!room) return;
     const p = room.players[room.turn];
-    if (p.id !== socket.id)     { socket.emit("err","Nije tvoj red."); return; }
-    if (p.isBot)                return;
-    if (room.phase !== "play")  { socket.emit("err","Prvo vuci kartu."); return; }
-    if (!p.opened)              { socket.emit("err","Moraš prvo otvoriti."); return; }
+    if (p.id !== socket.id)        { socket.emit("err","Nije tvoj red."); return; }
+    if (p.isBot || p.autoPlay)     return;
+    if (room.phase !== "play")     { socket.emit("err","Prvo vuci kartu."); return; }
+    if (!p.opened)                 { socket.emit("err","Moraš prvo otvoriti."); return; }
 
     const meld = room.table[meldIndex];
     if (!meld) { socket.emit("err","Taj meld ne postoji."); return; }
@@ -1117,6 +1113,7 @@ io.on("connection", socket => {
       ? "set" : "run";
 
     let handled = false;
+    let wasJokerSwap = false;
     if (meldType === "set") {
       // SET: prioritet dodavanju, joker zamjena samo kad nema mjesta (set pun)
       if (canAppend(meld, card)) {
@@ -1130,7 +1127,7 @@ io.on("connection", socket => {
           meld[jokerIdx] = card;
           removeFromHand(p, [cardId]);
           p.hand.push(joker);
-          handled = true;
+          handled = true; wasJokerSwap = true;
         }
       }
     } else {
@@ -1141,7 +1138,7 @@ io.on("connection", socket => {
         meld[jokerIdx] = card;
         removeFromHand(p, [cardId]);
         p.hand.push(joker);
-        handled = true;
+        handled = true; wasJokerSwap = true;
       } else if (canAppend(meld, card)) {
         removeFromHand(p, [cardId]);
         meld.push(card);
@@ -1152,6 +1149,7 @@ io.on("connection", socket => {
       socket.emit("err","Ta karta ne može ići u tu kombinaciju.");
       return;
     }
+    if (wasJokerSwap) io.to(roomId).emit("jokerSwap", { meldIndex });
 
     // NE endRound — igrač mora još baciti kartu
     sendHand(room, p);
@@ -1333,12 +1331,14 @@ io.on("connection", socket => {
     const p = room.players.find(pl => pl.name === name && !pl.connected && !pl.isBot);
     if (!p) { socket.emit("err","Nema mjesta za reconnect."); return; }
 
+    const oldId = p.id;
     p.id        = socket.id;
     p.connected = true;
+    if (room.host === oldId) room.host = socket.id; // prenesi host na novi socket
     socket.join(roomId);
     socket.data.roomId = roomId;
 
-    socket.emit("roomJoined", { roomId, isHost: room.host === p.id });
+    socket.emit("roomJoined", { roomId, isHost: room.host === socket.id });
     socket.emit("state", publicState(room));
     sendHand(room, p);
     io.to(roomId).emit("chat", { system: true, text: `${p.name} se vratio.` });

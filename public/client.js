@@ -34,6 +34,10 @@ let openingMelds    = []; // [ [cardId, ...], [cardId, ...], ... ]
 let hintCombos = [];
 let hintIdx    = -1;
 
+// Praćenje novih karata za flip-in animaciju
+let _prevHandIds   = new Set();
+let _newlyDrawnIds = new Set();
+
 // ════════════════════════════════════════════════════════════════
 //  DOM REFERENCE
 // ════════════════════════════════════════════════════════════════
@@ -308,16 +312,44 @@ socket.on("state", state => {
 });
 
 socket.on("yourHand", hand => {
-  hintCombos = []; hintIdx = -1;   // reset hinta
+  hintCombos = []; hintIdx = -1;
+  const newIds = new Set(hand.map(c => c.id));
+  _newlyDrawnIds = new Set([...newIds].filter(id => !_prevHandIds.has(id)));
+  _prevHandIds   = newIds;
   updateHandOrder(hand);
   myHand = hand;
   renderHand();
   updateButtons();
 });
 
-socket.on("roundOver", data => { stopTimerUI(); showRoundOver(data); });
+socket.on("roundOver", data => {
+  stopTimerUI();
+  showRoundOver(data);
+  // Konfeti ako sam pobijedio
+  const me = data.scores?.find(s => s.name === myName);
+  if (me?.isWinner) createConfetti();
+  else if (me && !me.isWinner) createRain();
+});
 socket.on("chat",  msg => addChat(msg));
-socket.on("err",   msg => showToast(msg, "error"));
+socket.on("err",   msg => {
+  showToast(msg, "error");
+  const footer = document.getElementById("hand-footer");
+  if (footer) {
+    footer.classList.remove("shake");
+    void footer.offsetWidth;
+    footer.classList.add("shake");
+    setTimeout(() => footer.classList.remove("shake"), 550);
+  }
+});
+socket.on("jokerSwap", ({ meldIndex }) => {
+  const melds = meldsArea.querySelectorAll(".meld");
+  const target = melds[meldIndex];
+  if (target) {
+    target.classList.add("meld-joker-flash");
+    setTimeout(() => target.classList.remove("meld-joker-flash"), 1000);
+  }
+  showToast("✨ Joker zamijenjen!", "info");
+});
 socket.on("quickChat", ({ playerId, msg }) => showQuickBubble(playerId, msg));
 
 // ════════════════════════════════════════════════════════════════
@@ -545,6 +577,14 @@ function seatFor(i) {
   return rel === 1 ? 'left' : rel === 2 ? 'top' : 'right';
 }
 
+function trendArrow(p) {
+  const d = p.lastRoundDelta;
+  if (d == null) return '';
+  if (d < 0) return `<span class="trend-down" title="Prošla runda: ${d}">▼</span>`;
+  if (d > 0) return `<span class="trend-up"   title="Prošla runda: +${d}">▲</span>`;
+  return '';
+}
+
 function scoreCssClass(p, scoreLimit) {
   const r = p.totalScore / scoreLimit;
   return p.eliminated ? 'chip-eliminated'
@@ -582,6 +622,7 @@ function renderTableSeats() {
           <div class="my-info ${isActive ? 'my-turn' : ''}">
             <span class="my-name">${escHtml(p.name)}</span>
             <span class="chip-score ${sc}">${p.totalScore}<span class="chip-limit">/${scoreLimit}</span></span>
+            ${trendArrow(p)}
             ${p.opened ? '<span class="chip-open">✓</span>' : ''}
             ${p.count === 1 ? '<span class="chip-last-card">⚠ ZADNJA!</span>' : ''}
             ${isActive ? '<span class="my-turn-badge">● MOJ RED</span>' : ''}
@@ -603,6 +644,7 @@ function renderTableSeats() {
             <span class="opp-chip-sub">
               ${p.count}🃏
               <span class="chip-score ${sc}">${p.totalScore}</span>
+              ${trendArrow(p)}
               ${p.opened     ? '<span class="opp-opened">✓</span>' : ''}
               ${p.eliminated ? '<span class="opp-elim">❌</span>' : ''}
             </span>
@@ -630,6 +672,7 @@ function renderTableSeats() {
           <div class="my-info ${isActive ? 'my-turn' : ''}">
             <span class="my-name">${escHtml(p.name)}</span>
             <span class="chip-score ${sc}">${p.totalScore}<span class="chip-limit">/${scoreLimit}</span></span>
+            ${trendArrow(p)}
             ${p.opened ? '<span class="chip-open">✓ Otvoren</span>' : ''}
             ${p.count === 1 ? '<span class="chip-last-card">⚠ ZADNJA!</span>' : ''}
             ${isActive ? '<span class="my-turn-badge">● TVJ RED</span>' : ''}
@@ -653,6 +696,7 @@ function renderTableSeats() {
             ${isActive ? '<span class="opp-turn-dot">●</span>' : ''}
             <span class="opp-count">${p.count}🃏</span>
             <span class="chip-score ${sc}">${p.totalScore}</span>
+            ${trendArrow(p)}
             ${p.opened    ? '<span class="opp-opened">✓</span>' : ''}
             ${p.eliminated ? '<span class="opp-elim">❌</span>'  : ''}
             ${p.count === 1 ? '<span class="chip-last-card" style="font-size:10px">⚠1!</span>' : ''}
@@ -773,8 +817,13 @@ function renderHand() {
     const el = document.createElement("div");
     el.className  = "card card-hand " + cardColorClass(c);
     el.dataset.id = c.id;
-    if (selected.has(c.id)) el.classList.add("selected");
-    if (c.id === dragCardId)  el.classList.add("dragging");
+    if (selected.has(c.id))        el.classList.add("selected");
+    if (c.id === dragCardId)       el.classList.add("dragging");
+    if (_newlyDrawnIds.has(c.id))  {
+      el.classList.add("new-card");
+      _newlyDrawnIds.delete(c.id); // jednom prikazi, pa makni da re-renderi ne okidaju ponovo
+      el.addEventListener("animationend", () => el.classList.remove("new-card"), { once: true });
+    }
     // Karte u staging areni su "zauzete" — vizualno ih osjenčaj
     const stagedIds = new Set(openingMelds.flat());
     if (stagedIds.has(c.id)) el.classList.add("staged");
@@ -1039,9 +1088,31 @@ function showRoundOver({ winnerName, scores, eliminated = [], scoreLimit = 2500,
   };
   overlay.style.display = "flex";
   overlay.classList.remove("anim-in");
-  void overlay.offsetWidth; // reflow da resetira animaciju
+  void overlay.offsetWidth;
   overlay.classList.add("anim-in");
   if (isHost) btnNewRound.style.display = "inline-flex";
+
+  // Animiraj totalScore brojeve u zadnjoj koloni
+  setTimeout(() => {
+    overlay.querySelectorAll(".score-table tbody tr").forEach(row => {
+      const cells = row.querySelectorAll("td");
+      const totalCell = cells[cells.length - 1];
+      if (!totalCell) return;
+      const finalVal = parseInt(totalCell.textContent);
+      if (isNaN(finalVal)) return;
+      const startVal = 0;
+      const dur = 600;
+      const startTime = performance.now();
+      const tick = now => {
+        const t = Math.min((now - startTime) / dur, 1);
+        const ease = 1 - Math.pow(1 - t, 3);
+        totalCell.textContent = Math.round(startVal + (finalVal - startVal) * ease);
+        if (t < 1) requestAnimationFrame(tick);
+        else totalCell.textContent = finalVal;
+      };
+      requestAnimationFrame(tick);
+    });
+  }, 200);
 }
 
 socket.on("gameOver", ({ winnerName, scores }) => {
@@ -1470,6 +1541,86 @@ function initTouchDrag(el, card) {
 //  HELPER FUNKCIJE
 // ════════════════════════════════════════════════════════════════
 
+// ════════════════════════════════════════════════════════════════
+//  KONFETI
+// ════════════════════════════════════════════════════════════════
+
+function createConfetti() {
+  const colors = ["#d4a843","#f0cc77","#e03333","#ffffff","#4caf50","#2196f3","#ff9800"];
+  const wrap   = document.createElement("div");
+  wrap.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:9000;overflow:hidden;";
+  document.body.appendChild(wrap);
+
+  for (let i = 0; i < 90; i++) {
+    const piece    = document.createElement("div");
+    piece.className = "confetti-piece";
+    const color    = colors[Math.floor(Math.random() * colors.length)];
+    const size     = 5 + Math.random() * 9;
+    const startX   = Math.random() * 100;
+    const delay    = Math.random() * 0.7;
+    const dur      = 1.3 + Math.random() * 1.4;
+    const drift    = (Math.random() - 0.5) * 220;
+    const rot      = Math.random() * 720 - 360;
+    const shape    = Math.random() > 0.5 ? "50%" : "2px";
+    piece.style.cssText = `
+      width:${size}px; height:${size * (Math.random() > 0.5 ? 0.5 : 1)}px;
+      background:${color}; left:${startX}%; top:-12px;
+      border-radius:${shape};
+      --drift:${drift}px; --rot:${rot}deg; --dur:${dur}s; --delay:${delay}s;
+    `;
+    wrap.appendChild(piece);
+  }
+
+  setTimeout(() => wrap.remove(), 3800);
+}
+
+function createRain() {
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:9000;overflow:hidden;";
+  document.body.appendChild(wrap);
+
+  // Tamni overlay
+  const overlay = document.createElement("div");
+  overlay.style.cssText = "position:absolute;inset:0;background:rgba(0,0,40,0.35);animation:rain-overlay-in 0.6s ease forwards;";
+  wrap.appendChild(overlay);
+
+  // Kapi kiše
+  for (let i = 0; i < 80; i++) {
+    const drop = document.createElement("div");
+    drop.className = "rain-drop";
+    const x     = Math.random() * 110 - 5;
+    const w     = 1.5 + Math.random() * 2;
+    const h     = 14 + Math.random() * 22;
+    const delay = (Math.random() * 1.2).toFixed(2);
+    const dur   = (0.6 + Math.random() * 0.7).toFixed(2);
+    drop.style.cssText = `left:${x}%;top:0;width:${w}px;height:${h}px;--dur:${dur}s;--delay:${delay}s;`;
+    wrap.appendChild(drop);
+  }
+
+  // Emoji tuge — plutaju gore-dolje
+  const sadEmojis = ["😢","😭","💔","😞"];
+  for (let i = 0; i < 6; i++) {
+    const em = document.createElement("div");
+    em.textContent = sadEmojis[i % sadEmojis.length];
+    const x     = 10 + Math.random() * 80;
+    const delay = (Math.random() * 1.4).toFixed(2);
+    em.style.cssText = `position:absolute;font-size:${28 + Math.random()*20}px;left:${x}%;top:110%;opacity:0;animation:emoji-rise 2.2s ${delay}s ease-out forwards;`;
+    wrap.appendChild(em);
+  }
+
+  // Splash efekti na dnu
+  for (let i = 0; i < 18; i++) {
+    const sp = document.createElement("div");
+    sp.className = "rain-splash";
+    const x     = Math.random() * 100;
+    const delay = (0.3 + Math.random() * 1.5).toFixed(2);
+    sp.style.cssText = `left:${x}%;bottom:${Math.random() * 15}%;animation-delay:${delay}s;`;
+    wrap.appendChild(sp);
+  }
+
+  setTimeout(() => wrap.remove(), 3500);
+}
+
 function switchScreen(name) {
   screenLobby.style.display = name === "lobby" ? "flex"  : "none";
   screenGame.style.display  = name === "game"  ? "flex"  : "none";
@@ -1535,7 +1686,7 @@ document.addEventListener("click", () => {
 
 // Prikaži/sakrij gumb ovisno o fazi igre (updateButtons ga ne treba dirati)
 function updateQcBtn(phase) {
-  qcBtn.style.display = ["draw","play","ended"].includes(phase) ? "flex" : "none";
+  qcBtn.style.display = ["draw","play","ended"].includes(phase) ? "inline-flex" : "none";
 }
 
 function getPlayerAnchorEl(playerId) {
@@ -1570,47 +1721,25 @@ function showQuickBubble(playerId, msg) {
   const anchor = getPlayerAnchorEl(playerId);
   if (!anchor) return;
 
-  // Ukloni stari bubble tog igrača
   const old = document.getElementById("qcb-" + playerId);
   if (old) old.remove();
   clearTimeout(_qcTimers[playerId]);
 
-  const rect   = anchor.getBoundingClientRect();
-  const isMe   = playerId === socket.id;
-  const isMobile = window.innerWidth <= 640;
+  const rect = anchor.getBoundingClientRect();
+  const cx   = rect.left + rect.width  / 2;
+  const cy   = rect.top  + rect.height / 2;
 
-  const bubble = document.createElement("div");
-  bubble.id        = "qcb-" + playerId;
-  bubble.className = "qc-bubble";
-  bubble.textContent = msg;
+  const el = document.createElement("div");
+  el.id        = "qcb-" + playerId;
+  el.className = "emoji-float";
+  el.textContent = msg;
+  el.style.left = cx + "px";
+  el.style.top  = cy + "px";
 
-  // Pozicioniraj iznad ili ispod elementa
-  if (isMe) {
-    // Iznad moje info bar — bubbles se pojavljuje iznad
-    bubble.style.left   = (rect.left + 12) + "px";
-    bubble.style.bottom = (window.innerHeight - rect.top + 6) + "px";
-    bubble.classList.add("qc-bubble-up");
-  } else if (anchor === oppTop || isMobile) {
-    // Ispod gornjeg panela / mobilnih chipova
-    bubble.style.left = (rect.left + rect.width / 2 - 60) + "px";
-    bubble.style.top  = (rect.bottom + 6) + "px";
-    bubble.classList.add("qc-bubble-down");
-  } else if (anchor === oppLeft) {
-    bubble.style.left = (rect.right + 8) + "px";
-    bubble.style.top  = (rect.top + rect.height / 2 - 18) + "px";
-    bubble.classList.add("qc-bubble-right");
-  } else if (anchor === oppRight) {
-    bubble.style.right = (window.innerWidth - rect.left + 8) + "px";
-    bubble.style.top   = (rect.top + rect.height / 2 - 18) + "px";
-    bubble.classList.add("qc-bubble-left");
-  }
+  document.body.appendChild(el);
 
-  qcBubbles.appendChild(bubble);
-
-  _qcTimers[playerId] = setTimeout(() => {
-    bubble.classList.add("qc-bubble-out");
-    setTimeout(() => bubble.remove(), 350);
-  }, 2800);
+  // Ukloni nakon animacije
+  _qcTimers[playerId] = setTimeout(() => el.remove(), 2500);
 }
 
 // ════════════════════════════════════════════════════════════════
