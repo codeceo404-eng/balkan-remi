@@ -54,7 +54,7 @@ const BOT_CHAT_LINES = [
 ];
 
 // ── QUICK CHAT PORUKE ─────────────────────────────────────────────
-const QUICK_MESSAGES = ["👍", "😂", "🤔", "😬", "🔥", "❤️"];
+const QUICK_MESSAGES = ["😇", "😂", "🤔", "😭", "🔥", "❤️"];
 
 // ── BOT CHAT TIMERI ───────────────────────────────────────────────
 function startBotChat(room) {
@@ -125,6 +125,8 @@ function isSet(cards) {
   if (cards.length < 3 || cards.length > 4) return false;
   const real = cards.filter(c => !isJoker(c));
   if (real.length === 0) return false;
+  // Max 1 joker u setu (2 jokera nisu dozvoljena)
+  if (cards.length - real.length > 1) return false;
   const name  = real[0].name;
   const suits = new Set();
   for (const c of real) {
@@ -151,10 +153,19 @@ function isRun(cards) {
     const sorted = [...real].sort((a, b) => idx(a.name) - idx(b.name));
     for (let i = 1; i < sorted.length; i++)
       if (sorted[i].name === sorted[i - 1].name) return false;
-    let gaps = 0;
-    for (let i = 1; i < sorted.length; i++)
-      gaps += idx(sorted[i].name) - idx(sorted[i - 1].name) - 1;
-    return gaps >= 0 && gaps <= jokers;
+
+    // Provjeri svaki razmak — smije biti max 1 (jokeri ne smiju biti jedan pored drugog)
+    let gapsUsed = 0;
+    for (let i = 1; i < sorted.length; i++) {
+      const gap = idx(sorted[i].name) - idx(sorted[i - 1].name) - 1;
+      if (gap > 1) return false;   // 2+ uzastopna jokera u praznini — zabranjeno
+      gapsUsed += gap;
+    }
+
+    const leftover = jokers - gapsUsed;
+    if (leftover < 0) return false;  // nema dovoljno jokera
+    if (leftover > 1) return false;  // 2+ jokera na kraju niza — bili bi jedan pored drugog
+    return true;
   }
 
   // As nizak (A,2,3…) ili As visok (…Q,K,A) — ali NE wrap-around (K,A,2)
